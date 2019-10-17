@@ -1,0 +1,19 @@
+6.828 Final Project Proposal
+Yianni Giannaris – yiannig@mit.edu
+Robert DeLaus – rdelaus@mit.edu
+
+Project Outline:
+
+We plan to add graphics display and user mouse input functionalities to xv6. To showcase our results, we will design two applications. The first application will be a terminal that allows users to interact with xv6. The second application will consist of a GUI with buttons and textboxes, that the user can interact with (via mouse). Our window system will allow the user to switch between windows.
+
+The first task is to write drivers to communicate with the “virtio-gpu-device” and “virtio-mouse-device” devices. Specifically, these drivers will have to implement initialization code that sets various flags in the devices as well as the functions implement the commands outlined in the virtio documentation.
+
+Next we need to write a framework that allows for display of letters and various shapes on screen. This framework will directly interact with the gpu driver.  We also need to write a framework that checks for mouse clicks. This framework will directly interact with the mouse driver.
+
+Next we need to write a framework that abstracts graphical items to objects (such as windows, buttons, textboxes). The user will have the ability to “create and add” objects to a window.
+
+Finally, at a high level, we need to write a framework that provides an eventloop for a window object. This framework will need to map mouse clicks to specific objects in a window, then notify the user that a specific object has been selected. This framework will provide an api that the user can use to respond to events.
+
+Things worth noting:
+
+Although Qemu documentation is quite sparse, we are confident that the current xv6 disk driver implementation along with the virtio manual will provide enough information to properly configure the drivers and devices.
