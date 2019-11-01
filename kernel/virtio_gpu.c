@@ -21,10 +21,10 @@ struct virtioqueue {
   // our own book-keeping.
   char free[NUM];  // is a descriptor free?
   uint16 used_idx; // we've looked this far in used[2..NUM].
-}
+};
 
 struct {
-  struct virtioqueue constrolq;
+  struct virtioqueue controlq;
   struct virtioqueue cursorq;
 
 
@@ -95,20 +95,20 @@ virtio_gpu_init(int n)
   if(max < NUM)
     panic("virtio disk max queue too short");
   *R(n, VIRTIO_MMIO_QUEUE_NUM) = NUM;
-  memset(gpu.controlq.pages, 0, sizeof(gpu.constrolq.pages));
-  *R(n, VIRTIO_MMIO_QUEUE_PFN) = ((uint64)gpu.constrolq.pages) >> PGSHIFT;
+  memset(gpu.controlq.pages, 0, sizeof(gpu.controlq.pages));
+  *R(n, VIRTIO_MMIO_QUEUE_PFN) = ((uint64)gpu.controlq.pages) >> PGSHIFT;
   //
   // desc = pages -- num * VRingDesc
   // avail = pages + 0x40 -- 2 * uint16, then num * uint16
   // used = pages + 4096 -- 2 * uint16, then num * vRingUsedElem
 
-  gpu.constrolq.desc = (struct VRingDesc *) gpu.constrolq.pages;
-  gpu.constrolq.avail = (uint16*)(((char*)gpu.constrolq.desc) + NUM*sizeof(struct VRingDesc));
-  gpu.constrolq.used = (struct UsedArea *) (gpu.constrolq.pages + PGSIZE);
+  gpu.controlq.desc = (struct VRingDesc *) gpu.controlq.pages;
+  gpu.controlq.avail = (uint16*)(((char*)gpu.controlq.desc) + NUM*sizeof(struct VRingDesc));
+  gpu.controlq.used = (struct UsedArea *) (gpu.controlq.pages + PGSIZE);
   
   // initialize cursor queue.
   *R(n, VIRTIO_MMIO_QUEUE_SEL) = 1;
-  uint32 max = *R(n, VIRTIO_MMIO_QUEUE_NUM_MAX);
+  max = *R(n, VIRTIO_MMIO_QUEUE_NUM_MAX);
   if(max == 0)
     panic("virtio disk has no queue 0");
   if(max < NUM)
@@ -122,9 +122,10 @@ virtio_gpu_init(int n)
   gpu.cursorq.used = (struct UsedArea *) (gpu.cursorq.pages + PGSIZE);
 
 
-  for(int i = 0; i < NUM; i++)
-    gpu.constrolq.free[i] = 1;
+  for(int i = 0; i < NUM; i++){
+    gpu.controlq.free[i] = 1;
     gpu.cursorq.free[i] = 1;
+  }
 
   gpu.init = 1;
   // plic.c and trap.c arrange for interrupts from VIRTIO0_IRQ.
