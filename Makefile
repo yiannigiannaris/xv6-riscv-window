@@ -29,6 +29,7 @@ OBJS = \
   $K/kernelvec.o \
   $K/plic.o \
   $K/virtio_disk.o \
+  $K/virtio_gpu.o \
   $K/buddy.o \
   $K/list.o
 

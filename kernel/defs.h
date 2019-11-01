@@ -183,6 +183,9 @@ void            virtio_disk_init(int);
 void            virtio_disk_rw(int, struct buf *, int);
 void            virtio_disk_intr(int);
 
+//virtio_gpu.c
+void            virtio_gpu_init(int);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 

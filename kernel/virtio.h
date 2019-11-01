@@ -43,6 +43,10 @@
 #define VIRTIO_RING_F_INDIRECT_DESC 28
 #define VIRTIO_RING_F_EVENT_IDX     29
 
+// gpu device feature bits
+#define VIRTIO_GPU_F_VIRGL 0
+#define VIRTIO_GPU_F_EDID 1
+
 // this many virtio descriptors.
 // must be a power of two.
 #define NUM 8
