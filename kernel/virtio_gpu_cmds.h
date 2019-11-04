@@ -73,6 +73,13 @@ struct virtio_gpu_get_edid {
         uint32 padding; 
 }; 
 
+struct virtio_gpu_resp_edid { 
+        struct virtio_gpu_ctrl_hdr hdr; 
+        uint32 size; 
+        uint32 padding; 
+        uint8 edid[1024]; 
+};
+
 //VIRTIO_GPU_CMD_RESOURCE_CREATE_2D
 //Response: VIRTIO_GPU_RESP_OK_NODATA
 enum virtio_gpu_formats { 
@@ -95,12 +102,6 @@ struct virtio_gpu_resource_create_2d {
         uint32 width; 
         uint32 height; 
 }; 
-struct virtio_gpu_resp_edid { 
-        struct virtio_gpu_ctrl_hdr hdr; 
-        uint32 size; 
-        uint32 padding; 
-        uint8 edid[1024]; 
-};
 
 //VIRTIO_GPU_CMD_RESOURCE_UNREF
 //Response: VIRTIO_GPU_RESP_OK_NODATA

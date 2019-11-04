@@ -13,6 +13,7 @@
 #define R(n, r) ((volatile uint32 *)(VIRTION(n) + (r)))
 
 void initialize_display(int n);
+void create_send_rectangle(int);
 
 struct virtioqueue {
   char pages[2*PGSIZE];
@@ -35,6 +36,7 @@ struct {
   int init;
 
   struct spinlock lock;
+  char framebuffer[2*PGSIZE];
 } __attribute__ ((aligned (PGSIZE))) gpu;
 
 struct virtio_gpu_config gpu_config; 
@@ -129,6 +131,7 @@ virtio_gpu_init(int n)
   // plic.c and trap.c arrange for interrupts from VIRTIO0_IRQ.
   virtio_gpu_get_config(n);
   initialize_display(n);
+  create_send_rectangle(n);
 }
 
 void
@@ -250,6 +253,334 @@ initialize_display(int n){
   }
   free_desc(1,2);
   release(&gpu.lock);
+}
+
+void
+create_resource(int n){
+  acquire(&gpu.lock);
+  int descidx = -1;
+  while(1){
+    if((descidx = alloc_desc(1, 2)) >= 0) {
+      break;
+    }
+    //sleep(&gpu.controlq.free[0], &gpu.lock);
+  } 
+  printf("first while\n");
+  if (descidx < 0)
+    panic("virt gpu initialize display");
+
+  struct virtio_gpu_ctrl_hdr ctrl_hdr = 
+    {
+      .type = VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
+      .flags = 0,
+      .fence_id = 0,
+      .ctx_id = 0,
+      .padding = 0
+    };
+  struct virtio_gpu_resource_create_2d request =
+  {
+    .hdr = ctrl_hdr,
+    .resource_id = 1,
+    .format = VIRTIO_GPU_FORMAT_B8G8R8A8_UNORM, 
+    .width = 500,
+    .height = 500,
+  };
+  struct virtio_gpu_ctrl_hdr resp; 
+
+  gpu.controlq.desc[descidx].addr = (uint64) kvmpa((uint64) &request);
+  gpu.controlq.desc[descidx].len = sizeof(request);
+  gpu.controlq.desc[descidx].flags = VIRTIO_GPU_FLAG_FENCE;
+  gpu.controlq.desc[descidx].flags |= VRING_DESC_F_NEXT;
+  gpu.controlq.desc[descidx].next = descidx + 1;
+
+  gpu.controlq.desc[descidx + 1].addr = (uint64) kvmpa((uint64) &resp);
+  gpu.controlq.desc[descidx + 1].len = sizeof(resp);
+  gpu.controlq.desc[descidx + 1].flags = VRING_DESC_F_WRITE;
+  gpu.controlq.desc[descidx + 1].next = 0;
+
+  
+
+  gpu.controlq.running[descidx] = 1;
+  gpu.controlq.avail->ring[gpu.controlq.avail->idx % NUM] = descidx;  
+  __sync_synchronize();
+  gpu.controlq.avail->idx += 1;
+
+  *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = 0; // value is queue number
+
+  printf("used_idx: %d\n",gpu.controlq.used_idx);
+  printf("used->id: %d\n",gpu.controlq.used->id);
+  while((gpu.controlq.used_idx) == (gpu.controlq.used->id)){
+  }
+
+  printf("second while\n");
+  struct VRingUsedElem used_elem = gpu.controlq.used->elems[gpu.controlq.used_idx % NUM];
+  gpu.controlq.used_idx += 1;
+  uint32 id = used_elem.id + 1;
+  resp = *(struct virtio_gpu_ctrl_hdr *)gpu.controlq.desc[id].addr;     
+  int bytes = used_elem.len;
+  printf("bytes: %d\n", bytes);
+  if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
+    printf("resp: %p\n",resp.type);
+    panic("virt gpu create_resource display"); 
+  }
+  free_desc(1,2);
+   
+  release(&gpu.lock);
+
+}
+
+void
+attach_frame_buffer(int n){
+  acquire(&gpu.lock);
+  int descidx = -1;
+  while(1){
+    if((descidx = alloc_desc(1, 3)) >= 0) {
+      break;
+    }
+    //sleep(&gpu.controlq.free[0], &gpu.lock);
+  } 
+  printf("first while\n");
+  if (descidx < 0)
+    panic("virt gpu initialize display");
+
+  struct virtio_gpu_ctrl_hdr ctrl_hdr = 
+    {
+      .type = VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING,
+      .flags = 0,
+      .fence_id = 0,
+      .ctx_id = 0,
+      .padding = 0
+    };
+  struct virtio_gpu_resource_attach_backing request1 =
+  {
+    .hdr = ctrl_hdr,
+    .resource_id = 1,
+    .nr_entries = 1,
+  };
+  struct virtio_gpu_mem_entry request2 =
+  {
+    .addr = (uint64)&gpu.framebuffer,
+    .length = 2*PGSIZE,
+    .padding = 0,
+  };
+  struct virtio_gpu_ctrl_hdr resp; 
+
+  gpu.controlq.desc[descidx].addr = (uint64) kvmpa((uint64) &request1);
+  gpu.controlq.desc[descidx].len = sizeof(request1);
+  gpu.controlq.desc[descidx].flags = VIRTIO_GPU_FLAG_FENCE;
+  gpu.controlq.desc[descidx].flags |= VRING_DESC_F_NEXT;
+  gpu.controlq.desc[descidx].next = descidx + 1;
+
+  gpu.controlq.desc[descidx + 1].addr = (uint64) kvmpa((uint64) &request2);
+  gpu.controlq.desc[descidx + 1].len = sizeof(request2);
+  gpu.controlq.desc[descidx + 1].flags = VIRTIO_GPU_FLAG_FENCE;
+  gpu.controlq.desc[descidx].flags |= VRING_DESC_F_NEXT;
+  gpu.controlq.desc[descidx + 1].next = descidx + 2;
+
+  gpu.controlq.desc[descidx + 2].addr = (uint64) kvmpa((uint64) &resp);
+  gpu.controlq.desc[descidx + 2].len = sizeof(resp);
+  gpu.controlq.desc[descidx + 2].flags = VRING_DESC_F_WRITE;
+  gpu.controlq.desc[descidx + 2].next = 0;
+
+  
+
+  gpu.controlq.running[descidx] = 1;
+  gpu.controlq.avail->ring[gpu.controlq.avail->idx % NUM] = descidx;  
+  __sync_synchronize();
+  gpu.controlq.avail->idx += 1;
+
+  printf("used->id: %d\n",gpu.controlq.used->id);
+  *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = 0; // value is queue number
+
+  printf("used_idx: %d\n",gpu.controlq.used_idx);
+  printf("used->id: %d\n",gpu.controlq.used->id);
+  while((gpu.controlq.used_idx) == (gpu.controlq.used->id)){
+  }
+
+  printf("second while\n");
+  struct VRingUsedElem used_elem = gpu.controlq.used->elems[gpu.controlq.used_idx % NUM];
+  gpu.controlq.used_idx += 1;
+  uint32 id = used_elem.id + 2;
+  resp = *(struct virtio_gpu_ctrl_hdr *)gpu.controlq.desc[id].addr;     
+  int bytes = used_elem.len;
+  printf("bytes: %d\n", bytes);
+  if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
+    printf("resp: %p\n",resp.type);
+    panic("virt gpu create_resource display"); 
+  }
+  free_desc(1,2);
+   
+  release(&gpu.lock);
+}
+
+void
+set_scanout(int n){
+  acquire(&gpu.lock);
+  int descidx = -1;
+  while(1){
+    if((descidx = alloc_desc(1, 2)) >= 0) {
+      break;
+    }
+    //sleep(&gpu.controlq.free[0], &gpu.lock);
+  } 
+  printf("first while\n");
+  if (descidx < 0)
+    panic("virt gpu initialize display");
+
+  struct virtio_gpu_ctrl_hdr ctrl_hdr = 
+    {
+      .type = VIRTIO_GPU_CMD_SET_SCANOUT,
+      .flags = 0,
+      .fence_id = 0,
+      .ctx_id = 0,
+      .padding = 0
+    };
+  struct virtio_gpu_rect rect =
+  {
+    .x = 0,
+    .y = 0,
+    .width = 200,
+    .height = 200
+  };
+
+  struct virtio_gpu_set_scanout request =
+  {
+    .hdr = ctrl_hdr,
+    .r = rect,
+    .scanout_id = 0,
+    .resource_id = 1
+  };
+  struct virtio_gpu_ctrl_hdr resp; 
+
+  gpu.controlq.desc[descidx].addr = (uint64) kvmpa((uint64) &request);
+  gpu.controlq.desc[descidx].len = sizeof(request);
+  gpu.controlq.desc[descidx].flags = VIRTIO_GPU_FLAG_FENCE;
+  gpu.controlq.desc[descidx].flags |= VRING_DESC_F_NEXT;
+  gpu.controlq.desc[descidx].next = descidx + 1;
+
+  gpu.controlq.desc[descidx + 1].addr = (uint64) kvmpa((uint64) &resp);
+  gpu.controlq.desc[descidx + 1].len = sizeof(resp);
+  gpu.controlq.desc[descidx + 1].flags = VRING_DESC_F_WRITE;
+  gpu.controlq.desc[descidx + 1].next = 0;
+
+  
+
+  gpu.controlq.running[descidx] = 1;
+  gpu.controlq.avail->ring[gpu.controlq.avail->idx % NUM] = descidx;  
+  __sync_synchronize();
+  gpu.controlq.avail->idx += 1;
+
+  *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = 0; // value is queue number
+
+  printf("used_idx: %d\n",gpu.controlq.used_idx);
+  printf("used->id: %d\n",gpu.controlq.used->id);
+  while((gpu.controlq.used_idx) == (gpu.controlq.used->id)){
+  }
+
+  printf("second while\n");
+  struct VRingUsedElem used_elem = gpu.controlq.used->elems[gpu.controlq.used_idx % NUM];
+  gpu.controlq.used_idx += 1;
+  uint32 id = used_elem.id + 1;
+  resp = *(struct virtio_gpu_ctrl_hdr *)gpu.controlq.desc[id].addr;     
+  int bytes = used_elem.len;
+  printf("bytes: %d\n", bytes);
+  if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
+    printf("resp: %p\n",resp.type);
+    panic("virt gpu create_resource display"); 
+  }
+  free_desc(1,2);
+   
+  release(&gpu.lock);
+}
+
+void
+flush(int n){
+  acquire(&gpu.lock);
+  int descidx = -1;
+  while(1){
+    if((descidx = alloc_desc(1, 2)) >= 0) {
+      break;
+    }
+    //sleep(&gpu.controlq.free[0], &gpu.lock);
+  } 
+  printf("first while\n");
+  if (descidx < 0)
+    panic("virt gpu initialize display");
+
+  struct virtio_gpu_ctrl_hdr ctrl_hdr = 
+    {
+      .type = VIRTIO_GPU_CMD_RESOURCE_FLUSH,
+      .flags = 0,
+      .fence_id = 0,
+      .ctx_id = 0,
+      .padding = 0
+    };
+  struct virtio_gpu_rect rect =
+  {
+    .x = 0,
+    .y = 0,
+    .width = 200,
+    .height = 200
+  };
+
+  struct virtio_gpu_resource_flush request =
+  {
+    .hdr = ctrl_hdr,
+    .r = rect,
+    .resource_id = 1,
+    .padding = 0
+  };
+  struct virtio_gpu_ctrl_hdr resp; 
+
+  gpu.controlq.desc[descidx].addr = (uint64) kvmpa((uint64) &request);
+  gpu.controlq.desc[descidx].len = sizeof(request);
+  gpu.controlq.desc[descidx].flags = VIRTIO_GPU_FLAG_FENCE;
+  gpu.controlq.desc[descidx].flags |= VRING_DESC_F_NEXT;
+  gpu.controlq.desc[descidx].next = descidx + 1;
+
+  gpu.controlq.desc[descidx + 1].addr = (uint64) kvmpa((uint64) &resp);
+  gpu.controlq.desc[descidx + 1].len = sizeof(resp);
+  gpu.controlq.desc[descidx + 1].flags = VRING_DESC_F_WRITE;
+  gpu.controlq.desc[descidx + 1].next = 0;
+
+  
+
+  gpu.controlq.running[descidx] = 1;
+  gpu.controlq.avail->ring[gpu.controlq.avail->idx % NUM] = descidx;  
+  __sync_synchronize();
+  gpu.controlq.avail->idx += 1;
+
+  *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = 0; // value is queue number
+
+  printf("used_idx: %d\n",gpu.controlq.used_idx);
+  printf("used->id: %d\n",gpu.controlq.used->id);
+  while((gpu.controlq.used_idx) == (gpu.controlq.used->id)){
+  }
+
+  printf("second while\n");
+  struct VRingUsedElem used_elem = gpu.controlq.used->elems[gpu.controlq.used_idx % NUM];
+  gpu.controlq.used_idx += 1;
+  uint32 id = used_elem.id + 1;
+  resp = *(struct virtio_gpu_ctrl_hdr *)gpu.controlq.desc[id].addr;     
+  int bytes = used_elem.len;
+  printf("bytes: %d\n", bytes);
+  if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
+    printf("resp: %p\n",resp.type);
+    panic("virt gpu create_resource display"); 
+  }
+  free_desc(1,2);
+   
+  release(&gpu.lock);
+}
+void create_send_rectangle(int n){
+  printf("create resource\n");
+  create_resource(n);
+  printf("attach frame buffer\n");
+  attach_frame_buffer(n);
+  printf("set_scanout\n");
+  set_scanout(n);
+  printf("flush\n");
+  flush(n);
 }
 
 void
