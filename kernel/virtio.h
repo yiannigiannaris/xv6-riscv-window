@@ -27,7 +27,7 @@
 #define VIRTIO_MMIO_INTERRUPT_STATUS	0x060 // read-only
 #define VIRTIO_MMIO_INTERRUPT_ACK	0x064 // write-only
 #define VIRTIO_MMIO_STATUS		0x070 // read/write
-
+#define VIRTIO_MMIO_CONFIG    0x100
 // status register bits, from qemu virtio_config.h
 #define VIRTIO_CONFIG_S_ACKNOWLEDGE	1
 #define VIRTIO_CONFIG_S_DRIVER		2
@@ -60,6 +60,13 @@ struct VRingDesc {
 #define VRING_DESC_F_NEXT  1 // chained with another descriptor
 #define VRING_DESC_F_WRITE 2 // device writes (vs read)
 
+struct VRingAvail {
+  uint16 flags;
+  uint16 idx;
+  uint16 ring[NUM];
+  uint16 used_vent;
+};
+
 struct VRingUsedElem {
   uint32 id;   // index of start of completed descriptor chain
   uint32 len;
@@ -73,4 +80,13 @@ struct UsedArea {
   uint16 flags;
   uint16 id;
   struct VRingUsedElem elems[NUM];
+};
+
+#define VIRTIO_GPU_EVENT_DISPLAY (1 << 0)
+
+struct virtio_gpu_config {
+        uint32 events_read;
+        uint32 events_clear;
+        uint32 num_scanouts;
+        uint32 reserved;
 };

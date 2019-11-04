@@ -18,7 +18,7 @@ struct virtioqueue {
   char pages[2*PGSIZE];
   
   struct VRingDesc *desc;
-  uint16 *avail;
+  struct VRingAvail *avail;
   struct UsedArea *used;
 
   // our own book-keeping.
@@ -37,7 +37,10 @@ struct {
   struct spinlock lock;
 } __attribute__ ((aligned (PGSIZE))) gpu;
 
+struct virtio_gpu_config gpu_config; 
 
+void
+virtio_gpu_get_config(int);
 
 void
 virtio_gpu_init(int n)
@@ -98,7 +101,7 @@ virtio_gpu_init(int n)
   // used = pages + 4096 -- 2 * uint16, then num * vRingUsedElem
 
   gpu.controlq.desc = (struct VRingDesc *) gpu.controlq.pages;
-  gpu.controlq.avail = (uint16*)(((char*)gpu.controlq.desc) + NUM*sizeof(struct VRingDesc));
+  gpu.controlq.avail = (struct VRingAvail*)(((char*)gpu.controlq.desc) + NUM*sizeof(struct VRingDesc));
   gpu.controlq.used = (struct UsedArea *) (gpu.controlq.pages + PGSIZE);
   
   // initialize cursor queue.
@@ -113,7 +116,7 @@ virtio_gpu_init(int n)
   *R(n, VIRTIO_MMIO_QUEUE_PFN) = ((uint64)gpu.cursorq.pages) >> PGSHIFT;
 
   gpu.cursorq.desc = (struct VRingDesc *) gpu.cursorq.pages;
-  gpu.cursorq.avail = (uint16*)(((char*)gpu.cursorq.desc) + NUM*sizeof(struct VRingDesc));
+  gpu.cursorq.avail = (struct VRingAvail*)(((char*)gpu.cursorq.desc) + NUM*sizeof(struct VRingDesc));
   gpu.cursorq.used = (struct UsedArea *) (gpu.cursorq.pages + PGSIZE);
 
 
@@ -124,13 +127,25 @@ virtio_gpu_init(int n)
 
   gpu.init = 1;
   // plic.c and trap.c arrange for interrupts from VIRTIO0_IRQ.
+  virtio_gpu_get_config(n);
   initialize_display(n);
 }
 
+void
+virtio_gpu_get_config(int n){
+  gpu_config = *(struct virtio_gpu_config*)R(n, VIRTIO_MMIO_CONFIG); 
+  /*
+  printf("--gpu config--\n");
+  printf("gpu events read: %d\n", gpu_config.events_read);
+  printf("gpu events clear: %d\n", gpu_config.events_clear);
+  printf("gpu num scanouts: %d\n", gpu_config.num_scanouts);
+  printf("gpu reserved: %d\n", gpu_config.reserved);
+  */
+}
 //
 // mark a descriptor as free.
 static void
-free_desc(int is_controlq, int i)
+free_desc(int is_controlq, int n)
 {
   struct virtioqueue *q;
   if(is_controlq){
@@ -138,31 +153,37 @@ free_desc(int is_controlq, int i)
   }else{
     q = &gpu.cursorq;
   }
-  if(i >= NUM)
+  if(n >= NUM)
     panic("virtio_gpu free index");
-  if(q->free[i])
-    panic("virtio_gpu free");
-  q->desc[i].addr = 0;
-  q->free[i] = 1;
+  for(int i = 0; i < n; i++){
+    if(q->free[i])
+      panic("virtio_gpu free");
+    q->desc[i].addr = 0;
+    q->free[i] = 1;
+  }
   wakeup(&q->free[0]);
 }
 
 static int
-alloc_desc(int is_controlq)
+alloc_desc(int is_controlq, int n)
 {
+  if(n > NUM){
+    panic("virtio gpu alloc too much");
+  }
   struct virtioqueue *q;
   if(is_controlq){
     q = &gpu.controlq;
   }else{
     q = &gpu.cursorq;
   }
-  for(int i = 0; i < NUM; i++){
+  for(int i = 0; i < n; i++){
     if(q->free[i]){
       q->free[i] = 0;
-      return i;
+    } else {
+      panic("virtio gpu alloc");
     }
   }
-  return -1;
+  return 0;
 }
 
 void
@@ -170,7 +191,7 @@ initialize_display(int n){
   acquire(&gpu.lock);
   int descidx = -1;
   while(1){
-    if((descidx = alloc_desc(1)) >= 0) {
+    if((descidx = alloc_desc(1, 2)) >= 0) {
       break;
     }
     //sleep(&gpu.controlq.free[0], &gpu.lock);
@@ -187,35 +208,47 @@ initialize_display(int n){
       .ctx_id = 0,
       .padding = 0
     };
+  struct virtio_gpu_resp_display_info resp; 
 
   gpu.controlq.desc[descidx].addr = (uint64) kvmpa((uint64) &ctrl_hdr);
-  gpu.controlq.desc[descidx].len = sizeof(ctrl_hdr);
-  gpu.controlq.desc[descidx].flags = 0;
-  gpu.controlq.desc[descidx].next = 0;
+  gpu.controlq.desc[descidx].len = sizeof(struct virtio_gpu_ctrl_hdr);
+  gpu.controlq.desc[descidx].flags = VIRTIO_GPU_FLAG_FENCE;
+  gpu.controlq.desc[descidx].next = descidx + 1;
+
+  gpu.controlq.desc[descidx + 1].addr = (uint64) kvmpa((uint64) &resp);
+  gpu.controlq.desc[descidx + 1].len = sizeof(resp);
+  gpu.controlq.desc[descidx + 1].flags = VRING_DESC_F_WRITE;
+  gpu.controlq.desc[descidx + 1].next = 0;
+
+  
 
   gpu.controlq.running[descidx] = 1;
-  gpu.controlq.avail[2 + (gpu.controlq.avail[1] % NUM)] = descidx;  
-  gpu.controlq.used->elems[descidx].id = 20;
+  gpu.controlq.avail->ring[gpu.controlq.avail->idx % NUM] = descidx;  
   __sync_synchronize();
-  gpu.controlq.avail[1] = gpu.controlq.avail[1] + 1;
+  gpu.controlq.avail->idx += 1;
 
   *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = 0; // value is queue number
   
-  //while(gpu.controlq.running[descidx]) {
-    //sleep(&gpu.controlq.running[descidx], &gpu.lock);
-  //}
-  while((gpu.controlq.used_idx % NUM) != (gpu.controlq.used->id % NUM)){
+  printf("used_idx: %d\n",gpu.controlq.used_idx);
+  printf("used->id: %d\n",gpu.controlq.used->id);
+  while((gpu.controlq.used_idx) == (gpu.controlq.used->id)){
   }
 
   printf("second while\n");
-  struct VRingUsedElem used_elem = gpu.controlq.used->elems[descidx];
-  uint32 id = used_elem.id;
-  struct virtio_gpu_resp_display_info resp = *(struct virtio_gpu_resp_display_info *)gpu.controlq.desc[id].addr;     
+  struct VRingUsedElem used_elem = gpu.controlq.used->elems[gpu.controlq.used_idx % NUM];
+  gpu.controlq.used_idx += 1;
+  uint32 id = used_elem.id + 1;
+  struct VRingDesc buf = gpu.controlq.desc[id];  
+  printf("buf addr: %p\n", buf.addr); 
+  printf("buf len: %d\n", buf.len); 
+  resp = *(struct virtio_gpu_resp_display_info *)gpu.controlq.desc[id].addr;     
+  int bytes = used_elem.len;
+  printf("bytes: %d\n", bytes);
   if(resp.hdr.type != VIRTIO_GPU_RESP_OK_DISPLAY_INFO){
-    printf("resp: %d\n",resp.hdr.type);
+    printf("resp: %p\n",resp.hdr.type);
     panic("virt gpu initialize display"); 
   }
-  free_desc(1,descidx);
+  free_desc(1,2);
   release(&gpu.lock);
 }
 
