@@ -189,6 +189,9 @@ void            virtio_mouse_recv_events(int);
 
 void            init_cursor(void);
 
+//virtio_gpu.c
+void            virtio_gpu_init(int);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 

@@ -44,6 +44,10 @@
 #define VIRTIO_RING_F_INDIRECT_DESC 28
 #define VIRTIO_RING_F_EVENT_IDX     29
 
+// gpu device feature bits
+#define VIRTIO_GPU_F_VIRGL 0
+#define VIRTIO_GPU_F_EDID 1
+
 // this many virtio descriptors.
 // must be a power of two.
 #define NUM 8
@@ -56,6 +60,13 @@ struct VRingDesc {
 };
 #define VRING_DESC_F_NEXT  1 // chained with another descriptor
 #define VRING_DESC_F_WRITE 2 // device writes (vs read)
+
+struct VRingAvail {
+  uint16 flags;
+  uint16 idx;
+  uint16 ring[NUM];
+  uint16 used_vent;
+};
 
 struct VRingUsedElem {
   uint32 id;   // index of start of completed descriptor chain
@@ -70,4 +81,13 @@ struct UsedArea {
   uint16 flags;
   uint16 id;
   struct VRingUsedElem elems[NUM];
+};
+
+#define VIRTIO_GPU_EVENT_DISPLAY (1 << 0)
+
+struct virtio_gpu_config {
+        uint32 events_read;
+        uint32 events_clear;
+        uint32 num_scanouts;
+        uint32 reserved;
 };
