@@ -29,11 +29,8 @@ OBJS = \
   $K/kernelvec.o \
   $K/plic.o \
   $K/virtio_disk.o \
-<<<<<<< HEAD
 	$K/virtio_mouse.o \
-=======
   $K/virtio_gpu.o \
->>>>>>> gpudriver
   $K/buddy.o \
   $K/list.o \
 	$K/display.o
