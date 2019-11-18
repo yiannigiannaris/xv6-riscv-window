@@ -183,6 +183,12 @@ void            virtio_disk_init(int);
 void            virtio_disk_rw(int, struct buf *, int);
 void            virtio_disk_intr(int);
 
+// virtio_mouse.c
+void            virtio_mouse_init(int);
+void            virtio_mouse_recv_events(int);
+
+void            init_cursor(void);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 

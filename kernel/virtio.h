@@ -27,6 +27,7 @@
 #define VIRTIO_MMIO_INTERRUPT_STATUS	0x060 // read-only
 #define VIRTIO_MMIO_INTERRUPT_ACK	0x064 // write-only
 #define VIRTIO_MMIO_STATUS		0x070 // read/write
+#define VIRTIO_MMIO_CONFIG    0x100
 
 // status register bits, from qemu virtio_config.h
 #define VIRTIO_CONFIG_S_ACKNOWLEDGE	1

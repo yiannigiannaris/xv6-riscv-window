@@ -32,6 +32,9 @@ main()
     iinit();         // inode cache
     fileinit();      // file table
     virtio_disk_init(minor(ROOTDEV)); // emulated hard disk
+    virtio_mouse_init(minor(1));
+    virtio_mouse_recv_events(minor(1));
+    //init_cursor();
     userinit();      // first user process
     __sync_synchronize();
     started = 1;

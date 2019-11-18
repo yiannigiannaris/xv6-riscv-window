@@ -29,8 +29,10 @@ OBJS = \
   $K/kernelvec.o \
   $K/plic.o \
   $K/virtio_disk.o \
+	$K/virtio_mouse.o \
   $K/buddy.o \
-  $K/list.o
+  $K/list.o \
+	$K/display.o
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
@@ -145,8 +147,8 @@ UPROGS=\
 	$U/_crashtest\
 	$U/_alloctest\
 
-fs.img: mkfs/mkfs README user/xargstest.sh $(UPROGS)
-	mkfs/mkfs fs.img README user/xargstest.sh $(UPROGS)
+fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes $(UPROGS)
+	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes $(UPROGS)
 
 -include kernel/*.d user/*.d
 
@@ -168,9 +170,9 @@ ifndef CPUS
 CPUS := 3
 endif
 
-QEMUEXTRA = -drive file=fs1.img,if=none,format=raw,id=x1 -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
-QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS)
-QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1
+QEMUEXTRA =
+QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
+QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.1, -device virtio-gpu-device,bus=virtio-mmio-bus.2
 
 qemu: $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)
