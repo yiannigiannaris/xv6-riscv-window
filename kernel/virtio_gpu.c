@@ -202,10 +202,15 @@ send_on_queue(int n, int q, int descidx){
   queue->avail->idx += 1;
 
   *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = q; // value is queue->number
+  /*
   printf("used_idx: %d\n",queue->used_idx);
   printf("used->id: %d\n",queue->used->id);
   while((queue->used_idx) == (queue->used->id)){
   }
+  */
+  printf("before sleep\n");
+  sleep(queue, &gpu.lock);
+  printf("after sleep\n");
 }
 void
 initialize_display(int n){
