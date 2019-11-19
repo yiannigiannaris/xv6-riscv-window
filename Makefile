@@ -33,7 +33,6 @@ OBJS = \
   $K/virtio_gpu.o \
   $K/buddy.o \
   $K/list.o \
-	$K/display.o
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
@@ -147,6 +146,7 @@ UPROGS=\
 	$U/_mounttest\
 	$U/_crashtest\
 	$U/_alloctest\
+	$U/_graphicstest\
 
 fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes $(UPROGS)
 	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes $(UPROGS)

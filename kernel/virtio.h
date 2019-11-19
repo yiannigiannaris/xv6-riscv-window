@@ -79,7 +79,7 @@ struct VRingUsedElem {
 
 struct UsedArea {
   uint16 flags;
-  uint16 id;
+  volatile uint16 id;
   struct VRingUsedElem elems[NUM];
 };
 

@@ -27,6 +27,7 @@ int ntas();
 int crash(const char*, int);
 int mount(char*, char *);
 int umount(char*);
+int testgraphics(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -5,12 +5,13 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
-char *argv[] = { "sh", 0 };
+char *argv[] = { "graphicstest", 0 };
 
 int
 main(void)
 {
-  int pid, wpid;
+  //int pid, wpid;
+  int pid;
 
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
@@ -19,20 +20,21 @@ main(void)
   dup(0);  // stdout
   dup(0);  // stderr
 
-  for(;;){
-    printf("init: starting sh\n");
-    pid = fork();
-    if(pid < 0){
-      printf("init: fork failed\n");
-      exit(1);
-    }
-    if(pid == 0){
-      exec("sh", argv);
-      printf("init: exec sh failed\n");
-      exit(1);
-    }
-    while((wpid=wait(0)) >= 0 && wpid != pid){
-      //printf("zombie!\n");
-    }
+  //for(;;){
+  printf("init: starting sh\n");
+  pid = fork();
+  if(pid < 0){
+    printf("init: fork failed\n");
+    exit(1);
   }
+  if(pid == 0){
+    exec("graphicstest", argv);
+    printf("init: exec sh failed\n");
+    exit(1);
+  }
+  //while((wpid=wait(0)) >= 0 && wpid != pid){
+    //printf("zombie!\n");
+  //}
+  while (1){}
+  //}
 }
