@@ -218,4 +218,4 @@ int lst_empty(struct list*);
 
 //virtio_gpu.c
 void create_send_rectangle(int);
-
+void virtio_gpu_intr();

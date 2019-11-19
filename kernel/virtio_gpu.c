@@ -165,6 +165,19 @@ alloc_desc(int queue, int n)
   return 0;
 }
 
+static int
+alloc_desc_wait(int q, int n)
+{
+  int descidx = -1;
+  while(1){
+    if((descidx = alloc_desc(q, n)) >= 0) {
+      break;
+    }
+    sleep(&gpu.queues[q], &gpu.lock);
+  } 
+  return descidx; 
+}
+
 uint64
 read_response(int q, int respidx){
   struct VRingUsedElem used_elem; 
@@ -185,21 +198,27 @@ send_on_queue(int n, int q, int descidx){
 
   *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = q; // value is queue->number
   while((queue->used_idx) == (queue->used->id)){
+    sleep(&gpu.queues[q], &gpu.lock);
   }
-  //panic("test panic send_on_queue");
-  //sleep(&gpu.queues[q], &gpu.lock);
+}
+
+void
+send_on_queue_no_sleep(int n, int q, int descidx){
+  struct virtioqueue *queue = &gpu.queues[q];
+  queue->running[descidx] = 1;
+  queue->avail->ring[queue->avail->idx % NUM] = descidx;  
+  __sync_synchronize();
+  queue->avail->idx += 1;
+
+  *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = q; // value is queue->number
+  while((queue->used_idx) == (queue->used->id)){
+  }
 }
 void
 initialize_display(int n){
   acquire(&gpu.lock);
-  int descidx = -1;
-  while(1){
-    if((descidx = alloc_desc(0, 2)) >= 0) {
-      break;
-    }
-    //sleep(&gpu.controlq.free[0], &gpu.lock);
-  } 
-  if (descidx < 0)
+  int descidx;
+  if ((descidx = alloc_desc_wait(0,2)) < 0)
     panic("virt gpu initialize display");
   struct virtioqueue *queue = &gpu.queues[0];
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
@@ -222,7 +241,7 @@ initialize_display(int n){
   queue->desc[descidx + 1].flags = VRING_DESC_F_WRITE;
   queue->desc[descidx + 1].next = 0;
 
-  send_on_queue(n, 0, descidx);
+  send_on_queue_no_sleep(n, 0, descidx);
   resp = *(struct virtio_gpu_resp_display_info *)read_response(0,1);     
   if(resp.hdr.type != VIRTIO_GPU_RESP_OK_DISPLAY_INFO){
     panic("virt gpu initialize display"); 
@@ -234,15 +253,8 @@ initialize_display(int n){
 void
 create_resource(int n){
   acquire(&gpu.lock);
-  int descidx = -1;
-  while(1){
-    if((descidx = alloc_desc(0, 2)) >= 0) {
-      break;
-    }
-    //sleep(&gpu.controlq.free[0], &gpu.lock);
-  } 
-  printf("first while\n");
-  if (descidx < 0)
+  int descidx;
+  if ((descidx = alloc_desc_wait(0,2)) < 0)
     panic("virt gpu create resource");
   struct virtioqueue *queue = &gpu.queues[0];
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
@@ -290,15 +302,8 @@ create_resource(int n){
 void
 attach_frame_buffer(int n){
   acquire(&gpu.lock);
-  int descidx = -1;
-  while(1){
-    if((descidx = alloc_desc(0, 3)) >= 0) {
-      break;
-    }
-    //sleep(&gpu.controlq.free[0], &gpu.lock);
-  } 
-  printf("first while\n");
-  if (descidx < 0)
+  int descidx;
+  if ((descidx = alloc_desc_wait(0,3)) < 0)
     panic("virt gpu initialize display");
   struct virtioqueue *queue = &gpu.queues[0];
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
@@ -355,14 +360,8 @@ attach_frame_buffer(int n){
 void
 set_scanout(int n){
   acquire(&gpu.lock);
-  int descidx = -1;
-  while(1){
-    if((descidx = alloc_desc(0, 2)) >= 0) {
-      break;
-    }
-    //sleep(&gpu.controlq.free[0], &gpu.lock);
-  } 
-  if (descidx < 0)
+  int descidx;
+  if ((descidx = alloc_desc_wait(0,2)) < 0)
     panic("virt gpu set scanout");
 
   struct virtioqueue *queue = &gpu.queues[0];
@@ -402,8 +401,6 @@ set_scanout(int n){
   queue->desc[descidx + 1].flags = VRING_DESC_F_WRITE;
   queue->desc[descidx + 1].next = 0;
 
-  
-
   send_on_queue(n, 0, descidx);
   resp = *(struct virtio_gpu_ctrl_hdr *)read_response(0,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
@@ -416,15 +413,8 @@ set_scanout(int n){
 void
 transfer_to_host(int n){
   acquire(&gpu.lock);
-  int descidx = -1;
-  while(1){
-    if((descidx = alloc_desc(0, 2)) >= 0) {
-      break;
-    }
-    //sleep(&gpu.controlq.free[0], &gpu.lock);
-  } 
-  printf("first while\n");
-  if (descidx < 0)
+  int descidx;
+  if ((descidx = alloc_desc_wait(0,2)) < 0)
     panic("virt gpu initialize display");
 
   struct virtioqueue *queue = &gpu.queues[0];
@@ -465,8 +455,6 @@ transfer_to_host(int n){
   queue->desc[descidx + 1].flags = VRING_DESC_F_WRITE;
   queue->desc[descidx + 1].next = 0;
 
-  
-
   send_on_queue(n, 0, descidx);
   resp = *(struct virtio_gpu_ctrl_hdr *)read_response(0,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
@@ -480,15 +468,8 @@ transfer_to_host(int n){
 void
 flush(int n){
   acquire(&gpu.lock);
-  int descidx = -1;
-  while(1){
-    if((descidx = alloc_desc(0, 2)) >= 0) {
-      break;
-    }
-    //sleep(&gpu.controlq.free[0], &gpu.lock);
-  } 
-  printf("first while\n");
-  if (descidx < 0)
+  int descidx;
+  if ((descidx = alloc_desc_wait(0,2)) < 0)
     panic("virt gpu flush");
 
   struct virtioqueue *queue = &gpu.queues[0];
@@ -528,8 +509,6 @@ flush(int n){
   queue->desc[descidx + 1].flags = VRING_DESC_F_WRITE;
   queue->desc[descidx + 1].next = 0;
 
-  
-
   send_on_queue(n, 0, descidx);
   resp = *(struct virtio_gpu_ctrl_hdr *)read_response(0,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
@@ -556,25 +535,8 @@ void
 virtio_gpu_intr(){
   acquire(&gpu.lock);
 
-  struct virtioqueue queue = gpu.queues[0];
-  while((queue.used_idx % NUM) != (queue.used->id % NUM)){
-    int id = queue.used->elems[queue.used_idx].id;
-
-    queue.running[id] = 0;   // disk is done with buf
-    wakeup(&queue.running[id]);
-
-    queue.used_idx = (queue.used_idx + 1) % NUM;
-  }
-
-  queue = gpu.queues[1];
-  while((queue.used_idx % NUM) != (queue.used->id % NUM)){
-    int id = queue.used->elems[queue.used_idx].id;
-
-    queue.running[id] = 0;   // disk is done with buf
-    wakeup(&queue.running[id]);
-
-    queue.used_idx = (queue.used_idx + 1) % NUM;
-  }
+    wakeup(&gpu.queues[0]);
+    wakeup(&gpu.queues[1]);
 
   release(&gpu.lock);
 }

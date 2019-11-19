@@ -187,9 +187,12 @@ devintr()
     //printf("device irq: %d\n", irq); 
     if(irq == UART0_IRQ){
       uartintr();
-    } else if(irq == VIRTIO0_IRQ || irq == VIRTIO1_IRQ ){
+    } else if(irq == VIRTIO0_IRQ){
       virtio_disk_intr(irq - VIRTIO0_IRQ);
+    } else if(irq == VIRTIO1_IRQ){
+       virtio_gpu_intr(irq - VIRTIO1_IRQ); 
     }
+
 
     plic_complete(irq);
     return 1;
