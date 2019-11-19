@@ -145,6 +145,7 @@ UPROGS=\
 	$U/_mounttest\
 	$U/_crashtest\
 	$U/_alloctest\
+	$U/_graphicstest\
 
 fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes $(UPROGS)
 	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes $(UPROGS)
@@ -174,6 +175,7 @@ QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS)
 #QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -nographic
 #QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -append console=ttyS0,38400 -serial file:serial.out
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -append console=ttyS0,38400 -serial file:serial.out
+#QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -nographic
 
 qemu: $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)

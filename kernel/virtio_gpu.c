@@ -15,7 +15,6 @@
 #define NUMQS 2
 
 void initialize_display(int n);
-void create_send_rectangle(int);
 
 struct virtioqueue {
   char pages[2*PGSIZE];
@@ -33,9 +32,6 @@ struct virtioqueue {
 
 struct {
  struct virtioqueue queues[NUMQS];
-  //struct virtioqueue controlq;
-  //struct virtioqueue cursorq;
-
   // initialized?
   int init;
 
@@ -106,10 +102,6 @@ virtio_gpu_init(int n)
     *R(n, VIRTIO_MMIO_QUEUE_NUM) = NUM;
     memset(queue->pages, 0, sizeof(queue->pages));
     *R(n, VIRTIO_MMIO_QUEUE_PFN) = ((uint64)queue->pages) >> PGSHIFT;
-    //
-    // desc = pages -- num * VRingDesc
-    // avail = pages + 0x40 -- 2 * uint16, then num * uint16
-    // used = pages + 4096 -- 2 * uint16, then num * vRingUsedElem
 
     queue->desc = (struct VRingDesc *) queue->pages;
     queue->avail = (struct VRingAvail*)(((char*)queue->desc) + NUM*sizeof(struct VRingDesc));
@@ -126,28 +118,18 @@ virtio_gpu_init(int n)
   virtio_gpu_get_config(n);
   initialize_display(n);
   uint32 rgba_value = 0;
-  //rgba_value = rgba_value | ((uint64)255 << 24);
-  //printf("rgba_value: %p\n", rgba_value);
-  //rgba_value = rgba_value | ((uint32)255 << 24) | ((uint32)255 << 16) | ((uint32)255 << 8) | ((uint32)255);
   rgba_value = rgba_value | ((uint32)255 << 24) | ((uint32)0 << 16) | ((uint32)0 << 8) | (uint32)255;
   printf("rgba_value: %d\n", rgba_value);
   uint32 *fb = (uint32*)gpu.framebuffer;
   for(;fb < (uint32*)gpu.framebuffer + (RECTTEST*RECTTEST*4);fb++){
     *fb = rgba_value;
   }
-  create_send_rectangle(n);
+  //create_send_rectangle(n);
 }
 
 void
 virtio_gpu_get_config(int n){
   gpu_config = *(struct virtio_gpu_config*)R(n, VIRTIO_MMIO_CONFIG); 
-  /*
-  printf("--gpu config--\n");
-  printf("gpu events read: %d\n", gpu_config.events_read);
-  printf("gpu events clear: %d\n", gpu_config.events_clear);
-  printf("gpu num scanouts: %d\n", gpu_config.num_scanouts);
-  printf("gpu reserved: %d\n", gpu_config.reserved);
-  */
 }
 //
 // mark a descriptor as free.
@@ -204,6 +186,8 @@ send_on_queue(int n, int q, int descidx){
   *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = q; // value is queue->number
   while((queue->used_idx) == (queue->used->id)){
   }
+  //panic("test panic send_on_queue");
+  //sleep(&gpu.queues[q], &gpu.lock);
 }
 void
 initialize_display(int n){
@@ -259,7 +243,7 @@ create_resource(int n){
   } 
   printf("first while\n");
   if (descidx < 0)
-    panic("virt gpu initialize display");
+    panic("virt gpu create resource");
   struct virtioqueue *queue = &gpu.queues[0];
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
@@ -378,9 +362,8 @@ set_scanout(int n){
     }
     //sleep(&gpu.controlq.free[0], &gpu.lock);
   } 
-  printf("first while\n");
   if (descidx < 0)
-    panic("virt gpu initialize display");
+    panic("virt gpu set scanout");
 
   struct virtioqueue *queue = &gpu.queues[0];
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
@@ -506,7 +489,7 @@ flush(int n){
   } 
   printf("first while\n");
   if (descidx < 0)
-    panic("virt gpu initialize display");
+    panic("virt gpu flush");
 
   struct virtioqueue *queue = &gpu.queues[0];
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 

@@ -95,3 +95,10 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+uint64
+sys_testgraphics(void)
+{
+  printf("testgraphics\n");
+  create_send_rectangle(1);
+  return 0;
+}
