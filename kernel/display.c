@@ -11,67 +11,67 @@
 #include "file.h"
 #include "proc.h"
 #include "stat.h"
+#include "display.h"
 
-#define FRAME_WIDTH 1024
-#define FRAME_HEIGHT 1024
-#define CURSOR_WIDTH 64
-#define CURSOR_HEIGHT 64
-
-uint8 *frame_array;
-uint8 *cursor_array;
-
-static struct inode*
-create(char *path, short type, short major, short minor)
-{
-  struct inode *ip, *dp;
-  char name[DIRSIZ];
-  printf("after\n");
-  if((dp = nameiparent(path, name)) == 0)
-    return 0;
-  printf("after\n");
-  ilock(dp);
-  printf("after\n");
-  if((ip = dirlookup(dp, name, 0)) != 0){
-    iunlockput(dp);
-    ilock(ip);
-    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
-      return ip;
-    iunlockput(ip);
-    return 0;
-  }
-  printf("after\n");
-  if((ip = ialloc(dp->dev, type)) == 0)
-    panic("create: ialloc");
-
-  ilock(ip);
-  ip->major = major;
-  ip->minor = minor;
-  ip->nlink = 1;
-  iupdate(ip);
-  printf("after\n");
-  if(type == T_DIR){  // Create . and .. entries.
-    dp->nlink++;  // for ".."
-    iupdate(dp);
-    // No ip->nlink++ for ".": avoid cyclic ref count.
-    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
-      panic("create dots");
-  }
-  printf("after\n");
-  if(dirlink(dp, name, ip->inum) < 0)
-    panic("create: dirlink");
-
-  iunlockput(dp);
-  printf("after\n");
-  return ip;
-}
+struct cursor dcursor;
+struct frame dframe;
 
 void
 init_cursor()
 {
-  cursor_array = kdisplaymem();
-  frame_array = cursor_array + CURSOR_DATA_SIZE;
-  printf("before\n");
-  struct inode *ip = create("/cursorbytes", T_FILE, 0, 0);
-  printf("after\n");
-  readi(ip, 0, (uint64)cursor_array, 0, CURSOR_DATA_SIZE);
+  dcursor.xpos = FRAME_WIDTH / 2;
+  dcursor.ypos = FRAME_HEIGHT / 2;
+  dcursor.height = CURSOR_HEIGHT;
+  dcursor.width = CURSOR_WIDTH;
+  dcursor.frame_buf = kdisplaymem();
+  memmove(dcursor.frame_buf, cursor_frame, CURSOR_WIDTH*CURSOR_HEIGHT*4);
+  printf("cursor initialized\n");
+}
+
+void
+update_cursor_rel(int yrel, int xrel)
+{
+  if(dcursor.xpos + xrel < 0){
+    dcursor.xpos = 0;
+  } else if(dcursor.xpos + xrel >= dframe.width){
+    dcursor.xpos = dframe.width - 1;
+  } else {
+    dcursor.xpos += xrel;
+  }
+
+  if(dcursor.ypos + yrel < 0){
+    dcursor.ypos = 0;
+  } else if(dcursor.ypos + yrel >= dframe.height){
+    dcursor.ypos = dframe.height - 1;
+  } else {
+    dcursor.ypos += yrel;
+  }
+}
+
+void
+update_cursor_abs(int yabs, int xabs)
+{
+  if(xabs < 0){
+    dcursor.xpos = 0;
+  } else if(xabs >= dframe.width){
+    dcursor.xpos = dframe.width - 1;
+  } else {
+    dcursor.xpos = xabs;
+  }
+
+  if(yabs < 0){
+    dcursor.ypos = 0;
+  } else if(yabs >= dframe.height){
+    dcursor.ypos = dframe.height - 1;
+  } else {
+    dcursor.ypos = yabs;
+  }
+}
+
+void init_frame()
+{
+  dframe.frame_buf = kdisplaymem() + CURSOR_DATA_SIZE;
+  dframe.height = FRAME_HEIGHT;
+  dframe.width = FRAME_WIDTH;
+  memset(dframe.frame_buf, 0, sizeof(uint8) * FRAME_DATA_SIZE);
 }

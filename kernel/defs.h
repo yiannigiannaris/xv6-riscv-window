@@ -62,6 +62,7 @@ void            ramdiskrw(struct buf*);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit();
+void*           kdisplaymem(void);
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -187,6 +188,7 @@ void            virtio_disk_intr(int);
 void            virtio_mouse_init(int);
 void            virtio_mouse_recv_events(int);
 
+// display.c
 void            init_cursor(void);
 
 //virtio_gpu.c
