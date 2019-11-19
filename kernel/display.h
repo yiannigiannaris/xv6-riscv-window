@@ -3,19 +3,18 @@
 #define CURSOR_WIDTH 64
 #define CURSOR_HEIGHT 64
 
-
 struct cursor {
   int xpos;
   int ypos;
   int height;
   int width;
-  uint8 *frame_buf;
+  uint32 *frame_buf;
 };
 
 struct frame {
   int height;
   int width;
-  uint8 *frame_buf;
+  uint32 *frame_buf;
 };
 
 
@@ -24,4 +23,6 @@ void          update_cursor_rel(int, int);
 void          update_cursor_abs(int, int);
 
 void          init_frame(void);
+void*         get_frame_buf();
+void*         get_cursor_frame_buf();
 

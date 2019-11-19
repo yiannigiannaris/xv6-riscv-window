@@ -75,3 +75,15 @@ void init_frame()
   dframe.width = FRAME_WIDTH;
   memset(dframe.frame_buf, 0, sizeof(uint8) * FRAME_DATA_SIZE);
 }
+
+void*
+get_frame_buf()
+{
+  return (void*) dframe.frame_buf;
+}
+
+void*
+get_cursor_frame_buf()
+{
+  return (void*) dcursor.frame_buf;
+}

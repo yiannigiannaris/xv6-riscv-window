@@ -220,4 +220,5 @@ int lst_empty(struct list*);
 
 //virtio_gpu.c
 void create_send_rectangle(int);
+void create_send_mouse(int);
 void virtio_gpu_intr();
