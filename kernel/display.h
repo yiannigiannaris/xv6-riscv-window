@@ -9,13 +9,15 @@ struct cursor {
   int ypos;
   int height;
   int width;
-  uint8 *frame_buf;
+  struct sleeplock lock;
+  uint32 *frame_buf;
 };
 
 struct frame {
   int height;
   int width;
-  uint8 *frame_buf;
+  struct sleeplock lock;
+  uint32 *frame_buf;
 };
 
 

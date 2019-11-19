@@ -36,7 +36,7 @@ main()
     virtio_gpu_init(minor(1));
     virtio_mouse_init(minor(2));
     /*virtio_mouse_recv_events(minor(2));*/
-    /*init_cursor();*/
+    init_cursor();
     userinit();      // first user process
     __sync_synchronize();
     started = 1;
