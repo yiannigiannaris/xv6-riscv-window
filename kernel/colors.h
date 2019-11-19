@@ -1,0 +1,12 @@
+#define C_WHITE 0xFFFFFF
+#define C_SILVER 0xC0C0C0
+#define C_GRAY 0x808080
+#define C_BLACK 0x000000
+#define C_RED 0xFF0000
+#define C_MAROON 0x800000
+#define C_YELLOW 0xFFFF00
+#define C_GREEN 0x00FF00
+#define C_AQUA 0x00FFFF
+#define C_BLUE 0x0000FF
+#define C_NAVY 0x000080
+#define C_PURPLE 0x800080
