@@ -37,6 +37,9 @@ kvminit()
   // virtio mmio disk interface 1
   kvmmap(VIRTION(1), VIRTION(1), PGSIZE, PTE_R | PTE_W);
 
+  // virtio mmio disk interface 2
+  kvmmap(VIRTION(2), VIRTION(2), PGSIZE, PTE_R | PTE_W);
+
   // CLINT
   kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 
