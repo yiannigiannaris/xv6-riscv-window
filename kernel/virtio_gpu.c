@@ -216,6 +216,18 @@ send_on_queue_no_sleep(int n, int q, int descidx){
   while((queue->used_idx) == (queue->used->id)){
   }
 }
+
+void
+send_on_queue_no_wait(int n, int q, int descidx){
+  struct virtioqueue *queue = &gpu.queues[q];
+  queue->running[descidx] = 1;
+  queue->avail->ring[queue->avail->idx % NUM] = descidx;  
+  __sync_synchronize();
+  queue->avail->idx += 1;
+
+  *R(n, VIRTIO_MMIO_QUEUE_NOTIFY) = q; // value is queue->number
+}
+
 void
 initialize_display(int n){
   acquire(&gpu.lock);
@@ -253,7 +265,43 @@ initialize_display(int n){
 }
 
 void
-create_resource(int n, int q, int frame_width, int frame_height, int resource_id){
+initialize_cursor(int n){
+  acquire(&gpu.lock);
+  int descidx;
+  if ((descidx = alloc_desc_wait(1,2)) < 0)
+    panic("virt gpu initialize display");
+  struct virtioqueue *queue = &gpu.queues[1];
+  struct virtio_gpu_ctrl_hdr ctrl_hdr = 
+    {
+      .type = VIRTIO_GPU_CMD_GET_DISPLAY_INFO,
+      .flags = 0,
+      .fence_id = 0,
+      .ctx_id = 0,
+      .padding = 0
+    };
+  struct virtio_gpu_resp_display_info resp; 
+
+  queue->desc[descidx].addr = (uint64) kvmpa((uint64) &ctrl_hdr);
+  queue->desc[descidx].len = sizeof(struct virtio_gpu_ctrl_hdr);
+  queue->desc[descidx].flags = VIRTIO_GPU_FLAG_FENCE;
+  queue->desc[descidx].next = descidx + 1;
+
+  queue->desc[descidx + 1].addr = (uint64) kvmpa((uint64) &resp);
+  queue->desc[descidx + 1].len = sizeof(resp);
+  queue->desc[descidx + 1].flags = VRING_DESC_F_WRITE;
+  queue->desc[descidx + 1].next = 0;
+
+  send_on_queue_no_sleep(n, 1, descidx);
+  resp = *(struct virtio_gpu_resp_display_info *)read_response(1,1);     
+  if(resp.hdr.type != VIRTIO_GPU_RESP_OK_DISPLAY_INFO){
+    panic("virt gpu initialize display"); 
+  }
+  free_desc(1, descidx, 2);
+  release(&gpu.lock);
+}
+
+void
+create_resource(int n, int q, int frame_width, int frame_height, int resource_id, uint32 flags){
   acquire(&gpu.lock);
   int descidx;
   if ((descidx = alloc_desc_wait(q,2)) < 0)
@@ -262,7 +310,7 @@ create_resource(int n, int q, int frame_width, int frame_height, int resource_id
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
       .type = VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
-      .flags = 0,
+      .flags = 0 | flags,
       .fence_id = 0,
       .ctx_id = 0,
       .padding = 0
@@ -302,7 +350,7 @@ create_resource(int n, int q, int frame_width, int frame_height, int resource_id
 }
 
 void
-attach_frame_buffer(int n, int q, uint64 fb, int frame_width, int frame_height, int resource_id){
+attach_frame_buffer(int n, int q, uint64 fb, int frame_width, int frame_height, int resource_id, uint32 flags){
   acquire(&gpu.lock);
   int descidx;
   if ((descidx = alloc_desc_wait(q,3)) < 0)
@@ -311,7 +359,7 @@ attach_frame_buffer(int n, int q, uint64 fb, int frame_width, int frame_height, 
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
       .type = VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING,
-      .flags = 0,
+      .flags = 0 | flags,
       .fence_id = 0,
       .ctx_id = 0,
       .padding = 0
@@ -360,7 +408,7 @@ attach_frame_buffer(int n, int q, uint64 fb, int frame_width, int frame_height, 
 }
 
 void
-set_scanout(int n, int q, int frame_width, int frame_height, int resource_id, int scanout_id){
+set_scanout(int n, int q, int frame_width, int frame_height, int resource_id, int scanout_id, uint32 flags){
   acquire(&gpu.lock);
   int descidx;
   if ((descidx = alloc_desc_wait(q,2)) < 0)
@@ -370,7 +418,7 @@ set_scanout(int n, int q, int frame_width, int frame_height, int resource_id, in
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
       .type = VIRTIO_GPU_CMD_SET_SCANOUT,
-      .flags = 0,
+      .flags = 0 | flags,
       .fence_id = 0,
       .ctx_id = 0,
       .padding = 0
@@ -406,6 +454,7 @@ set_scanout(int n, int q, int frame_width, int frame_height, int resource_id, in
   send_on_queue(n, q, descidx);
   resp = *(struct virtio_gpu_ctrl_hdr *)read_response(q,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
+    printf("scanout error: %p\n", resp.type);
     panic("virt gpu set scanout"); 
   }
   free_desc(q, descidx, 2);
@@ -413,7 +462,7 @@ set_scanout(int n, int q, int frame_width, int frame_height, int resource_id, in
   release(&gpu.lock);
 }
 void
-transfer_to_host(int n, int q, int frame_width, int frame_height, int resource_id){
+transfer_to_host(int n, int q, int x, int y, int frame_width, int frame_height, int resource_id, uint32 flags){
   acquire(&gpu.lock);
   int descidx;
   if ((descidx = alloc_desc_wait(q,2)) < 0)
@@ -423,15 +472,15 @@ transfer_to_host(int n, int q, int frame_width, int frame_height, int resource_i
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
       .type = VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D,
-      .flags = 0,
+      .flags = 0 | flags,
       .fence_id = 0,
       .ctx_id = 0,
       .padding = 0
     };
   struct virtio_gpu_rect rect =
   {
-    .x = 0,
-    .y = 0,
+    .x = x,
+    .y = y,
     .width = frame_width,
     .height = frame_height,
   };
@@ -468,7 +517,7 @@ transfer_to_host(int n, int q, int frame_width, int frame_height, int resource_i
 }
 
 void
-flush(int n, int frame_width, int frame_height, int resource_id){
+flush(int n, int frame_width, int frame_height, int resource_id, uint32 flags){
   acquire(&gpu.lock);
   int descidx;
   if ((descidx = alloc_desc_wait(0,2)) < 0)
@@ -478,7 +527,7 @@ flush(int n, int frame_width, int frame_height, int resource_id){
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
       .type = VIRTIO_GPU_CMD_RESOURCE_FLUSH,
-      .flags = 0,
+      .flags = 0 | flags,
       .fence_id = 0,
       .ctx_id = 0,
       .padding = 0
@@ -522,7 +571,7 @@ flush(int n, int frame_width, int frame_height, int resource_id){
 }
 
 void
-update_cursor(int n, int x, int y, int resource_id, int scanout_id)
+update_cursor(int n, int x, int y, int resource_id, int scanout_id, uint32 flags)
 {
   acquire(&gpu.lock);
   int descidx;
@@ -533,7 +582,7 @@ update_cursor(int n, int x, int y, int resource_id, int scanout_id)
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
       .type = VIRTIO_GPU_CMD_UPDATE_CURSOR,
-      .flags = 0,
+      .flags = 0 | flags,
       .fence_id = 0,
       .ctx_id = 0,
       .padding = 0
@@ -556,7 +605,7 @@ update_cursor(int n, int x, int y, int resource_id, int scanout_id)
     .hot_y = 0,
     .padding = 0
   }; 
-  struct virtio_gpu_ctrl_hdr resp; 
+  struct virtio_gpu_ctrl_hdr resp;
 
   queue->desc[descidx].addr = (uint64) kvmpa((uint64) &request);
   queue->desc[descidx].len = sizeof(request);
@@ -569,10 +618,11 @@ update_cursor(int n, int x, int y, int resource_id, int scanout_id)
   queue->desc[descidx + 1].flags = VRING_DESC_F_WRITE;
   queue->desc[descidx + 1].next = 0;
 
-  send_on_queue(n, 1, descidx);
+  send_on_queue_no_wait(n, 1, descidx);
   resp = *(struct virtio_gpu_ctrl_hdr *)read_response(1,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
-    panic("virt gpu flush"); 
+    printf("resp: %p\n", resp.type);
+    panic("virt gpu update cursor"); 
   }
   free_desc(1, descidx, 2);
    
@@ -584,26 +634,34 @@ void create_send_rectangle(int n){
   int resource_id = 1;
   int q = 0;
   int scanout_id = 0;
-  create_resource(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id);
+  create_resource(n, q, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, 0);
   printf("attach frame buffer\n");
-  attach_frame_buffer(n, q, (uint64)gpu.framebuffer, FRAME_WIDTH, FRAME_HEIGHT, resource_id);
+  attach_frame_buffer(n, q, (uint64)gpu.framebuffer, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
   printf("set_scanout\n");
-  set_scanout(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id, scanout_id);
+  set_scanout(n, q, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, scanout_id, 0);
   printf("transfer to host\n");
-  transfer_to_host(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id);
+  transfer_to_host(n, q, 0, 0, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, 0);
   printf("flush\n");
-  flush(n, FRAME_WIDTH, FRAME_HEIGHT, resource_id);
+  flush(n, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, 0);
 }
 void create_send_mouse(int n)
 {
   int resource_id = 2;
   int q = 0;
   int scanout_id = 0;
-  create_resource(n, q, CURSOR_WIDTH, CURSOR_HEIGHT, resource_id);
-  attach_frame_buffer(n, q, (uint64)get_cursor_frame_buf(), CURSOR_WIDTH, CURSOR_HEIGHT, resource_id);
-  //set_scanout(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id, scanout_id);
-  transfer_to_host(n, q, CURSOR_WIDTH, CURSOR_HEIGHT, resource_id);
-  update_cursor(n, 0, 0, resource_id, scanout_id);
+  printf("start initialize cursor\n");
+  intialize_cursorc(n);
+  printf("completed initialize cursor\n");
+  create_resource(n, q, CURSOR_WIDTH, CURSOR_HEIGHT, resource_id, VIRTIO_GPU_FLAG_FENCE);
+  printf("completed cursor create_resource\n");
+  attach_frame_buffer(n, q, (uint64)get_cursor_frame_buf(), CURSOR_WIDTH, CURSOR_HEIGHT, resource_id, VIRTIO_GPU_FLAG_FENCE);
+  printf("completed cursor attach_frame_buffer\n");
+//  set_scanout(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id, scanout_id, VIRTIO_GPU_FLAG_FENCE);
+  transfer_to_host(n, q, 0, 0, CURSOR_WIDTH, CURSOR_HEIGHT, resource_id, VIRTIO_GPU_FLAG_FENCE);
+  printf("completed cursor transfer_to_host\n");
+  printf("started cursor update_cursor\n");
+  update_cursor(n, 0, 0, resource_id, scanout_id, VIRTIO_GPU_FLAG_FENCE);
+  printf("completed cursor update_cursor\n");
 }
 
 void

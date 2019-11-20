@@ -5,7 +5,10 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "sleeplock.h"
 #include "display.h"
+
 
 /*
  * the kernel's page table.

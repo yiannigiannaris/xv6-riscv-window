@@ -105,6 +105,8 @@ void*
 get_cursor_frame_buf()
 {
   return (void*) dcursor.frame_buf;
+}
+
 void
 set_pixel(int x, int y, uint32 color, uint8 alpha)
 {
