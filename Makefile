@@ -175,7 +175,7 @@ endif
 QEMUEXTRA = -drive file=fs1.img,if=none,format=raw,id=x1 -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS)
 #QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -nographic
-QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -append console=ttyS0,38400 -serial file:serial.out
+QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -append console=ttyS0, -serial file:serial.out
 
 qemu: $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)

@@ -119,13 +119,13 @@ virtio_gpu_init(int n)
   printf("fb: %p\n", gpu.framebuffer);
   virtio_gpu_get_config(n);
   initialize_display(n);
-  uint32 rgba_value = 0;
-  rgba_value = rgba_value | ((uint32)255 << 24) | ((uint32)0 << 16) | ((uint32)0 << 8) | (uint32)255;
-  printf("rgba_value: %d\n", rgba_value);
-  uint32 *fb = (uint32*)gpu.framebuffer;
-  for(;fb < (uint32*)gpu.framebuffer + (RECTTEST*RECTTEST*4);fb++){
-    *fb = rgba_value;
-  }
+  /*uint32 rgba_value = 0;*/
+  /*rgba_value = rgba_value | ((uint32)255 << 24) | ((uint32)0 << 16) | ((uint32)0 << 8) | (uint32)255;*/
+  /*printf("rgba_value: %d\n", rgba_value);*/
+  /*uint32 *fb = (uint32*)gpu.framebuffer;*/
+  /*for(;fb < (uint32*)gpu.framebuffer + (RECTTEST*RECTTEST*4);fb++){*/
+    /**fb = rgba_value;*/
+  /*}*/
   //create_send_rectangle(n);
 }
 
@@ -319,7 +319,7 @@ create_resource(int n, int q, int frame_width, int frame_height, int resource_id
   {
     .hdr = ctrl_hdr,
     .resource_id = resource_id,
-    .format = VIRTIO_GPU_FORMAT_A8R8G8B8_UNORM,
+    .format = VIRTIO_GPU_FORMAT_A8B8G8R8_UNORM,
     .width = frame_width,
     .height = frame_height,
   };
@@ -634,23 +634,51 @@ void create_send_rectangle(int n){
   int resource_id = 1;
   int q = 0;
   int scanout_id = 0;
-  create_resource(n, q, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, 0);
+  create_resource(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
   printf("attach frame buffer\n");
   attach_frame_buffer(n, q, (uint64)gpu.framebuffer, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
   printf("set_scanout\n");
-  set_scanout(n, q, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, scanout_id, 0);
+  set_scanout(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id, scanout_id, 0);
   printf("transfer to host\n");
-  transfer_to_host(n, q, 0, 0, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, 0);
+  transfer_to_host(n, q, 0, 0, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
   printf("flush\n");
-  flush(n, FRAME_WIDTH/2, FRAME_HEIGHT/2, resource_id, 0);
+  flush(n, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
 }
+
+void start_screen(int n){
+  printf("create resource\n");
+  int resource_id = 1;
+  int q = 0;
+  int scanout_id = 0;
+  create_resource(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
+  printf("attach frame buffer\n");
+  attach_frame_buffer(n, q, (uint64)gpu.framebuffer, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
+  printf("set_scanout\n");
+  set_scanout(n, q, FRAME_WIDTH, FRAME_HEIGHT, resource_id, scanout_id, 0);
+  printf("transfer to host\n");
+  transfer_to_host(n, q, 0, 0, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
+  printf("flush\n");
+  flush(n, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
+}
+
+void update_screen(int n){
+  printf("create resource\n");
+  int resource_id = 1;
+  int q = 0;
+  printf("transfer to host\n");
+  transfer_to_host(n, q, 0, 0, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
+  printf("flush\n");
+  flush(n, FRAME_WIDTH, FRAME_HEIGHT, resource_id, 0);
+}
+
+
 void create_send_mouse(int n)
 {
   int resource_id = 2;
   int q = 0;
   int scanout_id = 0;
   printf("start initialize cursor\n");
-  intialize_cursorc(n);
+  initialize_cursor(n);
   printf("completed initialize cursor\n");
   create_resource(n, q, CURSOR_WIDTH, CURSOR_HEIGHT, resource_id, VIRTIO_GPU_FLAG_FENCE);
   printf("completed cursor create_resource\n");
