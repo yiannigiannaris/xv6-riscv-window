@@ -99,9 +99,7 @@ uint64
 sys_testgraphics(void)
 {
   printf("testgraphics\n");
-  start_screen(1);
-  display_test(1);
-  /*create_send_rectangle(1);*/
-  /*create_send_mouse(1);*/
+  create_send_rectangle(1);
+  create_send_mouse(1);
   return 0;
 }

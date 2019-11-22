@@ -28,8 +28,8 @@ main(void)
     exit(1);
   }
   if(pid == 0){
-    exec("graphicstest", argv);
     printf("init: exec sh failed\n");
+    while (1){}
     exit(1);
   }
   //while((wpid=wait(0)) >= 0 && wpid != pid){

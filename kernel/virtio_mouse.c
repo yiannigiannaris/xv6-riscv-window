@@ -10,25 +10,25 @@
 #include "virtio.h"
 #include "events.h"
 
-#define NUM_MOUSE_EVENTS 10
+#define NUM_MOUSE_MOUSE_EVENTS 10
 #define R(n, r) ((volatile uint32 *)(VIRTION(n) + (r)))
 
-#define NUM_KEY_SUPPORTED 2
-#define NUM_REL_SUPPORTED 2
+#define NUM_MOUSE_KEY_SUPPORTED 2
+#define NUM_MOUSE_REL_SUPPORTED 2
 uint mouse_key_codes[] = {BTN_LEFT, BTN_RIGHT};
 uint mouse_rel_codes[] = {REL_X, REL_Y};
 
 struct virtqueue_avail {
   uint16 flags;
   uint16 idx;
-  uint16 ring[NUM];
+  uint16 ring[NUM_MOUSE];
 };
 
 struct virtqueue {
     struct VRingDesc *desc;
     struct virtqueue_avail *avail;
     struct UsedArea *used;
-    char free[NUM];
+    char free[NUM_MOUSE];
     uint16 used_idx;
 };
 
@@ -38,14 +38,14 @@ struct virtio_input_event {
 	uint32 value;
 };
 
-struct virtio_input_event event_bufs[NUM];
+struct virtio_input_event event_bufs[NUM_MOUSE];
 
 struct {
     char pages_event[2*PGSIZE];
     char pages_status[2*PGSIZE];
     struct virtqueue eventq;
     struct virtqueue statusq;
-    struct virtio_input_event* events[NUM];
+    struct virtio_input_event* events[NUM_MOUSE];
     struct spinlock vmouse_lock;
     int init;
 } __attribute__ ((aligned (PGSIZE))) mouse;
@@ -97,7 +97,7 @@ virtio_mouse_supports_key(int n)
   if(config->size == 0)
     panic("virtio mouse EV_KEY not supported");
   uint key_code;
-  for(int i = 0; i < NUM_KEY_SUPPORTED; i++){
+  for(int i = 0; i < NUM_MOUSE_KEY_SUPPORTED; i++){
     key_code = mouse_key_codes[i];
     if(!(config->u.bitmap[key_code / 8] & (1 << key_code % 8)))
       panic("virtio mouse key code not supported");
@@ -113,7 +113,7 @@ virtio_mouse_supports_rel(int n)
   if(config->size == 0)
     panic("virtio mouse EV_REL not supported");
   uint rel_code;
-  for(int i = 0; i < NUM_REL_SUPPORTED; i++){
+  for(int i = 0; i < NUM_MOUSE_REL_SUPPORTED; i++){
     rel_code = mouse_rel_codes[i];
     if(!(config->u.bitmap[rel_code / 8] & (1 << rel_code % 8)))
       panic("virtio mouse rel code not supported");
@@ -161,9 +161,9 @@ virtio_mouse_init(int n)
   uint32 max = *R(n, VIRTIO_MMIO_QUEUE_NUM_MAX);
   if(max == 0)
     panic("virtio mouse has no queue 0");
-  if(max < NUM)
+  if(max < NUM_MOUSE)
     panic("virtio mouse max queue too short");
-  *R(n, VIRTIO_MMIO_QUEUE_NUM) = NUM;
+  *R(n, VIRTIO_MMIO_QUEUE_NUM) = NUM_MOUSE;
   memset(mouse.pages_event, 0, sizeof(mouse.pages_event));
   *R(n, VIRTIO_MMIO_QUEUE_PFN) = ((uint64)mouse.pages_event) >> PGSHIFT;
 
@@ -171,23 +171,23 @@ virtio_mouse_init(int n)
   *R(n, VIRTIO_MMIO_QUEUE_SEL) = 1;
   if(max == 0)
     panic("virtio mouse has no queue 1");
-  if(max < NUM)
+  if(max < NUM_MOUSE)
     panic("virtio mouse max queue too short");
-  *R(n, VIRTIO_MMIO_QUEUE_NUM) = NUM;
+  *R(n, VIRTIO_MMIO_QUEUE_NUM) = NUM_MOUSE;
   memset(mouse.pages_status, 0, sizeof(mouse.pages_status));
   *R(n, VIRTIO_MMIO_QUEUE_PFN) = ((uint64)mouse.pages_status) >> PGSHIFT;
 
   mouse.eventq.desc = (struct VRingDesc *) mouse.pages_event;
-  mouse.eventq.avail = (struct virtqueue_avail *)(((char*)mouse.eventq.desc) + NUM*sizeof(struct VRingDesc));
+  mouse.eventq.avail = (struct virtqueue_avail *)(((char*)mouse.eventq.desc) + NUM_MOUSE*sizeof(struct VRingDesc));
   mouse.eventq.used = (struct UsedArea *) (mouse.pages_event + PGSIZE);
-  for(int i = 0; i < NUM; i++)
+  for(int i = 0; i < NUM_MOUSE; i++)
     mouse.eventq.free[i] = 1;
 
   mouse.statusq.desc = (struct VRingDesc *) mouse.pages_status;
-  mouse.statusq.avail = (struct virtqueue_avail *)(((char*)mouse.statusq.desc) + NUM*sizeof(struct VRingDesc));
+  mouse.statusq.avail = (struct virtqueue_avail *)(((char*)mouse.statusq.desc) + NUM_MOUSE*sizeof(struct VRingDesc));
   mouse.statusq.used = (struct UsedArea *) (mouse.pages_status + PGSIZE);
 
-  for(int i = 0; i < NUM; i++)
+  for(int i = 0; i < NUM_MOUSE; i++)
     mouse.statusq.free[i] = 1;
 
   mouse.init = 1;
@@ -200,7 +200,7 @@ virtio_mouse_init(int n)
 static int
 alloc_event_desc()
 {
-  for(int i = 0; i < NUM; i++){
+  for(int i = 0; i < NUM_MOUSE; i++){
     if(mouse.eventq.free[i]){
       mouse.eventq.free[i] = 0;
       return i;
@@ -212,13 +212,13 @@ alloc_event_desc()
 static void
 free_event_desc(int i)
 {
-  if(i >= NUM)
+  if(i >= NUM_MOUSE)
     panic("virtio mouse free eventq desc 1");
   if(mouse.eventq.free[i])
     panic("virtio mouse free eventq desc 2");
   mouse.eventq.desc[i].addr = 0;
   mouse.eventq.free[i] = 1;
-  wakeup(&mouse.eventq.free[0]);
+  /*wakeup(&mouse.eventq.free[0]);*/
 }
 
 void
@@ -230,7 +230,7 @@ virtio_mouse_queue_event_buf(struct virtio_input_event *b)
     if((idx = alloc_event_desc()) >= 0){
       break;
     }
-    sleep(&mouse.eventq.free[0], &mouse.vmouse_lock);
+    /*sleep(&mouse.eventq.free[0], &mouse.vmouse_lock);*/
   }
 
   mouse.eventq.desc[idx].addr = (uint64) kvmpa((uint64) b);
@@ -238,7 +238,7 @@ virtio_mouse_queue_event_buf(struct virtio_input_event *b)
   mouse.eventq.desc[idx].flags = VRING_DESC_F_WRITE;
   mouse.eventq.desc[idx].next = 0;
   mouse.events[idx] = b;
-  mouse.eventq.avail->ring[mouse.eventq.avail->idx % NUM] = idx;
+  mouse.eventq.avail->ring[mouse.eventq.avail->idx % NUM_MOUSE] = idx;
   __sync_synchronize();
   mouse.eventq.avail->idx = mouse.eventq.avail->idx + 1;
   release(&mouse.vmouse_lock);
@@ -254,7 +254,7 @@ virtio_mouse_notify_eventq(int n)
 void
 virtio_mouse_fill_event_queue(int n)
 { 
-  for(int i = 0; i < NUM; i++){
+  for(int i = 0; i < NUM_MOUSE; i++){
     virtio_mouse_queue_event_buf(&event_bufs[i]);
   }
   virtio_mouse_notify_eventq(n);
@@ -327,9 +327,11 @@ virtio_mouse_handle_rel_event(uint16 code, uint32 value)
   switch(code)
   {
     case REL_X:
+      update_cursor_rel((int)value, 0);
       printf("x ");
       break;
     case REL_Y:
+      update_cursor_rel(0, (int)value);
       printf("y ");
       break;
     default:
@@ -368,11 +370,11 @@ virtio_mouse_handle_event(struct virtio_input_event *b)
 int
 virtio_mouse_get_event_buf()
 {
-  if((mouse.eventq.used_idx % NUM) == (mouse.eventq.used->id % NUM)){
+  if((mouse.eventq.used_idx % NUM_MOUSE) == (mouse.eventq.used->id % NUM_MOUSE)){
     return -1;
   }
   int id = mouse.eventq.used->elems[mouse.eventq.used_idx].id;
-  mouse.eventq.used_idx = (mouse.eventq.used_idx + 1) % NUM;
+  mouse.eventq.used_idx = (mouse.eventq.used_idx + 1) % NUM_MOUSE;
   return id;
 }
 
@@ -380,7 +382,7 @@ void
 print_bufs()
 {
   printf("EVENT BUFS:\n");
-  for(int i = 0; i < NUM; i++){
+  for(int i = 0; i < NUM_MOUSE; i++){
     printf("  %d:, type=%p, code=%p, value=%p\n", i, event_bufs[i].type, event_bufs[i].code, event_bufs[i].value);
   }
 }
@@ -390,19 +392,19 @@ print_eventq()
 {
   printf("EVENTQ:\n");
   printf("  DESC:\n");
-  for(int id = 0; id < NUM; id++){
+  for(int id = 0; id < NUM_MOUSE; id++){
     printf("    %d: addr=%p, len=%d, flags=%p, next=%d\n", id, mouse.eventq.desc[id].addr, mouse.eventq.desc[id].len, mouse.eventq.desc[id].flags, mouse.eventq.desc[id].next);
   }
   printf("  AVAIL: flags=%p, idx=%d, ring:\n", mouse.eventq.avail->flags, mouse.eventq.avail->idx);
-  for(int id = 0; id < NUM; id++){
+  for(int id = 0; id < NUM_MOUSE; id++){
     printf("    %d: %d\n", id, mouse.eventq.avail->ring[id]);
   }
   printf("  USED: flags=%p, id=%d elems:\n", mouse.eventq.used->flags, mouse.eventq.used->id);
-  for(int id = 0; id < NUM; id++){
+  for(int id = 0; id < NUM_MOUSE; id++){
     printf("    %d: id=%d, len=%d\n", id, mouse.eventq.used->elems[id].id, mouse.eventq.used->elems[id].len);
   }
   printf("  FREE:\n");
-  for(int id = 0; id < NUM; id++){
+  for(int id = 0; id < NUM_MOUSE; id++){
     printf("    %d: %d\n", id, mouse.eventq.free[id]);
   }
   printf("  USED_IDX=%d\n", mouse.eventq.used_idx);
@@ -412,7 +414,7 @@ void
 print_state()
 {
   printf("EVENTS: ");
-  for(int i = 0; i < NUM; i++){
+  for(int i = 0; i < NUM_MOUSE; i++){
     printf("%p, ", mouse.events[i]);
   }
   printf("\n");

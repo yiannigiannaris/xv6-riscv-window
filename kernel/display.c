@@ -4,11 +4,8 @@
 #include "param.h"
 #include "memlayout.h"
 #include "spinlock.h"
-#include "sleeplock.h"
 #include "fs.h"
-#include "buf.h"
 #include "cursor.h"
-#include "file.h"
 #include "proc.h"
 #include "stat.h"
 #include "display.h"
@@ -22,32 +19,21 @@ void print_frame();
 void
 init_cursor()
 {
-  initsleeplock(&dcursor.lock, "cursor");
-  dcursor.xpos = FRAME_WIDTH / 2;
-  dcursor.ypos = FRAME_HEIGHT / 2;
+  initlock(&dcursor.lock, "cursor");
+  dcursor.xpos = CURSOR_START_X;
+  dcursor.ypos = CURSOR_START_Y;
   dcursor.height = CURSOR_HEIGHT;
   dcursor.width = CURSOR_WIDTH;
   dcursor.frame_buf = kdisplaymem();
   memmove(dcursor.frame_buf, cursor_frame, CURSOR_WIDTH*CURSOR_HEIGHT*4);
+  update_cursor(CURSOR_START_X, CURSOR_START_Y, (uint64)dcursor.frame_buf, 0);
   printf("cursor initialized\n");
-
-  /*uint32 *pix;*/
-  /*for(int y = 0; y < CURSOR_HEIGHT; y++){*/
-    /*for(int x = 0; x < CURSOR_WIDTH; x++){*/
-      /*pix = dcursor.frame_buf + (y * CURSOR_WIDTH) + x;*/
-      /*int r = (*pix & 0xff000000) >> 24;*/
-      /*int g = (*pix & 0x00ff0000) >> 16;*/
-      /*int b = (*pix & 0x0000ff00) >> 8;*/
-      /*int a = (*pix & 0x000000ff);*/
-      /*printf("{%d,%d,%d,%d}", r, g, b, a);*/
-    /*}*/
-  /*}*/
 }
 
 void
 update_cursor_rel(int xrel, int yrel)
 {
-  acquiresleep(&dcursor.lock);
+  acquire(&dcursor.lock);
   if(dcursor.xpos + xrel < 0){
     dcursor.xpos = 0;
   } else if(dcursor.xpos + xrel >= dframe.width){
@@ -63,13 +49,14 @@ update_cursor_rel(int xrel, int yrel)
   } else {
     dcursor.ypos += yrel;
   }
-  releasesleep(&dcursor.lock);
+  release(&dcursor.lock);
+  move_cursor(dcursor.xpos, dcursor.ypos, 0);
 }
 
 void
 update_cursor_abs(int xabs, int yabs)
 {
-  acquiresleep(&dcursor.lock);
+  acquire(&dcursor.lock);
   if(xabs < 0){
     dcursor.xpos = 0;
   } else if(xabs >= dframe.width){
@@ -85,16 +72,18 @@ update_cursor_abs(int xabs, int yabs)
   } else {
     dcursor.ypos = yabs;
   }
-  releasesleep(&dcursor.lock);
+  release(&dcursor.lock);
+  move_cursor(dcursor.xpos, dcursor.ypos, 0);
 }
 
 void init_frame()
 {
-  initsleeplock(&dframe.lock, "frame");
+  initlock(&dframe.lock, "frame");
   dframe.frame_buf = kdisplaymem() + CURSOR_DATA_SIZE;
   dframe.height = FRAME_HEIGHT;
   dframe.width = FRAME_WIDTH;
   memset(dframe.frame_buf, 0, sizeof(char) * FRAME_DATA_SIZE);
+  update_frame_buffer((uint64)dframe.frame_buf, 0);
 }
 
 void*
@@ -244,27 +233,27 @@ reset_frame()
   memset(dframe.frame_buf, 0, sizeof(char) * FRAME_DATA_SIZE);
 }
 
-void
-display_test(int n)
-{
-  printf("display test\n");
-  /*draw_rect(500, 500, 100, 100, C_MAROON, 255);*/
-  /*draw_circle(500, 500, 100, C_AQUA, 255);*/
-  /*draw_line(20, 20, 600, 600, C_YELLOW, 255);*/
-  /*draw_line(20, 20, 600, 20, C_BLUE, 255);*/
-  /*draw_line(600, 605, 20, 25, C_GREEN, 255);*/
-  /*draw_line(605, 25, 25, 25, C_PURPLE, 255);*/
-  /*print_frame();*/
-  draw_window(200, 200, 400, 500);
-  draw_window(100, 300, 400, 200);
-  update_screen(n);
-  int x = 0;
-  while(1){
-    reset_frame();
-    draw_rect(x % FRAME_WIDTH, 480, 50, 50, C_AQUA, 255);
-    update_screen(n);
-    x+=15;
-  }
-}
+/*void*/
+/*display_test(int n)*/
+/*{*/
+  /*printf("display test\n");*/
+  /*[>draw_rect(500, 500, 100, 100, C_MAROON, 255);<]*/
+  /*[>draw_circle(500, 500, 100, C_AQUA, 255);<]*/
+  /*[>draw_line(20, 20, 600, 600, C_YELLOW, 255);<]*/
+  /*[>draw_line(20, 20, 600, 20, C_BLUE, 255);<]*/
+  /*[>draw_line(600, 605, 20, 25, C_GREEN, 255);<]*/
+  /*[>draw_line(605, 25, 25, 25, C_PURPLE, 255);<]*/
+  /*[>print_frame();<]*/
+  /*draw_window(200, 200, 400, 500);*/
+  /*draw_window(100, 300, 400, 200);*/
+  /*update_screen(n);*/
+  /*int x = 0;*/
+  /*while(1){*/
+    /*reset_frame();*/
+    /*draw_rect(x % FRAME_WIDTH, 480, 50, 50, C_AQUA, 255);*/
+    /*update_screen(n);*/
+    /*x+=15;*/
+  /*}*/
+/*}*/
 
 

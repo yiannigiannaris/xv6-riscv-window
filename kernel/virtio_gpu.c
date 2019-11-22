@@ -621,11 +621,10 @@ move_cursor_cmd(int q, int x, int y, int resource_id, int scanout_id, uint32 fla
 
 
 void
-update_cursor(int x, int y, uint64 framebuffer)
+update_cursor(int x, int y, uint64 framebuffer, int should_sleep)
 {
   int q = 0;
   int scanout_id = 0;
-  int should_sleep = 1;
   attach_frame_buffer(q, framebuffer, CURSOR_WIDTH, CURSOR_HEIGHT, CURSOR_RESOURCE_ID, VIRTIO_GPU_FLAG_FENCE, should_sleep);
   transfer_to_host(q, 0, 0, CURSOR_WIDTH, CURSOR_HEIGHT, CURSOR_RESOURCE_ID, VIRTIO_GPU_FLAG_FENCE, should_sleep);
   q = 1;
@@ -633,17 +632,16 @@ update_cursor(int x, int y, uint64 framebuffer)
 }
 
 void
-move_cursor(int x, int y)
+move_cursor(int x, int y, int should_sleep)
 {
-  move_cursor_cmd(1, x, y, CURSOR_RESOURCE_ID, 0, VIRTIO_GPU_FLAG_FENCE, 1);
+  move_cursor_cmd(1, x, y, CURSOR_RESOURCE_ID, 0, VIRTIO_GPU_FLAG_FENCE, should_sleep);
 }
 
 void
-update_frame_buffer(uint64 framebuffer)
+update_frame_buffer(uint64 framebuffer, int should_sleep)
 {
   int q = 0;
   int scanout_id = 0;
-  int should_sleep = 1;
   attach_frame_buffer(q, framebuffer, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, scanout_id, should_sleep);
   set_scanout(q, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, scanout_id, scanout_id, should_sleep);
   transfer_to_host(q, 0, 0, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, scanout_id, should_sleep);
@@ -658,7 +656,6 @@ initialize_cursor()
 
 void
 initialize_display(){
-  gpu.framebuffer = (uint32*)get_frame_buf(); 
   get_display_info(0, VIRTIO_GPU_FLAG_FENCE, 0);
   create_resource(0, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, 0, 0);
 }
@@ -676,10 +673,10 @@ virtio_gpu_intr(){
 }
 
 void create_send_rectangle(){
-  update_frame_buffer((uint64)gpu.framebuffer);
+  update_frame_buffer((uint64)gpu.framebuffer, 1);
 }
 
 void create_send_mouse()
 {
-  update_cursor(20, 20, (uint64)get_cursor_frame_buf());
+  update_cursor(20, 20, (uint64)get_cursor_frame_buf(), 1);
 }
