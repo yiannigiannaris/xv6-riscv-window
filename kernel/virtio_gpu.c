@@ -134,17 +134,6 @@ virtio_gpu_init(int n)
   virtio_gpu_get_config();
   initialize_display();
   initialize_cursor();
-  // plic.c and trap.c arrange for interrupts from VIRTIO0_IRQ.
-  gpu.framebuffer = (uint32*)get_frame_buf(); 
-  printf("fb: %p\n", gpu.framebuffer);
-  uint32 rgba_value = 0;
-  rgba_value = rgba_value | ((uint32)255 << 24) | ((uint32)0 << 16) | ((uint32)0 << 8) | (uint32)255;
-  printf("rgba_value: %d\n", rgba_value);
-  uint32 *fb = (uint32*)gpu.framebuffer;
-  for(;fb < (uint32*)gpu.framebuffer + (RECTTEST*RECTTEST*4);fb++){
-    *fb = rgba_value;
-  }
-  //create_send_rectangle(n);
 }
 
 void
@@ -669,6 +658,7 @@ initialize_cursor()
 
 void
 initialize_display(){
+  gpu.framebuffer = (uint32*)get_frame_buf(); 
   get_display_info(0, VIRTIO_GPU_FLAG_FENCE, 0);
   create_resource(0, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, 0, 0);
 }
