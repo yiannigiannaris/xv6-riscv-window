@@ -600,7 +600,7 @@ update_cursor(int n, int x, int y, int resource_id, int scanout_id, uint32 flags
   struct virtioqueue *queue = &gpu.queues[1];
   struct virtio_gpu_ctrl_hdr ctrl_hdr = 
     {
-      .type = VIRTIO_GPU_CMD_MOVE_CURSOR,
+      .type = VIRTIO_GPU_CMD_UPDATE_CURSOR,
       .flags = 0 | flags,
       .fence_id = 1,
       .ctx_id = 0,
@@ -650,7 +650,7 @@ update_cursor(int n, int x, int y, int resource_id, int scanout_id, uint32 flags
  // printf("resp addr: %p\n", respaddr);
   printf("fence_id: %p\n", resp.fence_id);
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
-    printf("resp: %p\n", resp.type);
+    printf("resp: %p, flags: %p, ctx_id: %p, padding: %p\n", resp.type, resp.flags, resp.ctx_id, resp.padding);
     panic("virt gpu update cursor"); 
   }
   free_desc(1, descidx, 2);
@@ -687,7 +687,8 @@ void create_send_mouse(int n)
   transfer_to_host(n, q, 0, 0, CURSOR_WIDTH, CURSOR_HEIGHT, resource_id, VIRTIO_GPU_FLAG_FENCE);
   printf("completed cursor transfer_to_host\n");
   printf("started cursor update_cursor\n");
-  update_cursor(n, 0, 0, resource_id, scanout_id, VIRTIO_GPU_FLAG_FENCE);
+  update_cursor(n, 20, 20, resource_id, scanout_id, VIRTIO_GPU_FLAG_FENCE);
+  flush(n, CURSOR_WIDTH, CURSOR_HEIGHT, resource_id, 0);
   printf("completed cursor update_cursor\n");
 }
 
