@@ -194,12 +194,13 @@ alloc_desc_wait(int q, int n)
 }
 
 uint64
-read_response(int q, int respidx){
+read_response(int n, int q, int respidx){
   struct VRingUsedElem used_elem; 
   struct virtioqueue *queue = &gpu.queues[q];
   used_elem = queue->used->elems[queue->used_idx % NUM];
   queue->used_idx += 1;
   uint32 id = used_elem.id + respidx;
+  *R(n, VIRTIO_MMIO_INTERRUPT_ACK) = 1;
   return queue->desc[id].addr;   
 }
 
@@ -274,7 +275,7 @@ initialize_display(int n){
   queue->desc[descidx + 1].next = 0;
 
   send_on_queue_no_sleep(n, 0, descidx);
-  resp = *(struct virtio_gpu_resp_display_info *)read_response(0,1);     
+  resp = *(struct virtio_gpu_resp_display_info *)read_response(n,0,1);     
   if(resp.hdr.type != VIRTIO_GPU_RESP_OK_DISPLAY_INFO){
     panic("virt gpu initialize display"); 
   }
@@ -310,7 +311,7 @@ initialize_cursor(int n){
   queue->desc[descidx + 1].next = 0;
 
   send_on_queue_no_sleep(n, 1, descidx);
-  resp = *(struct virtio_gpu_resp_display_info *)read_response(1,1);     
+  resp = *(struct virtio_gpu_resp_display_info *)read_response(n,1,1);     
   if(resp.hdr.type != VIRTIO_GPU_RESP_OK_DISPLAY_INFO){
     panic("virt gpu initialize display"); 
   }
@@ -357,7 +358,7 @@ create_resource(int n, int q, int frame_width, int frame_height, int resource_id
   
 
   send_on_queue(n, q, descidx);
-  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(q,1);     
+  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(n,q,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
     panic("virt gpu create_resource display"); 
   }
@@ -416,7 +417,7 @@ attach_frame_buffer(int n, int q, uint64 fb, int frame_width, int frame_height, 
   
 
   send_on_queue(n, q, descidx);
-  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(q,2);     
+  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(n,q,2);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
     panic("virt gpu attach frame buffer"); 
   }
@@ -470,7 +471,7 @@ set_scanout(int n, int q, int frame_width, int frame_height, int resource_id, in
   queue->desc[descidx + 1].next = 0;
 
   send_on_queue(n, q, descidx);
-  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(q,1);     
+  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(n,q,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
     printf("scanout error: %p\n", resp.type);
     panic("virt gpu set scanout"); 
@@ -525,7 +526,7 @@ transfer_to_host(int n, int q, int x, int y, int frame_width, int frame_height, 
   queue->desc[descidx + 1].next = 0;
 
   send_on_queue(n, q, descidx);
-  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(q,1);     
+  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(n,q,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
     panic("virt gpu transfer to host"); 
   }
@@ -579,7 +580,7 @@ flush(int n, int frame_width, int frame_height, int resource_id, uint32 flags){
   queue->desc[descidx + 1].next = 0;
 
   send_on_queue(n, 0, descidx);
-  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(0,1);     
+  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(n,0,1);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
     panic("virt gpu flush"); 
   }
@@ -644,7 +645,7 @@ update_cursor(int n, int x, int y, int resource_id, int scanout_id, uint32 flags
   queue->desc[descidx + 1].next = 0;
   printf("original addr: %p\n", queue->desc[descidx + 1].addr);
   send_on_queue(n, 1, descidx);
-  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(1,1);     
+  resp = *(struct virtio_gpu_ctrl_hdr *)read_response(n,1,1);     
   //struct virtio_gpu_ctrl_hdr *respaddr = (struct virtio_gpu_ctrl_hdr *)read_response(1,1);     
  // printf("resp addr: %p\n", respaddr);
   printf("fence_id: %p\n", resp.fence_id);
@@ -693,9 +694,11 @@ void create_send_mouse(int n)
 void
 virtio_gpu_intr(){
   acquire(&gpu.lock);
-
-    wakeup(&gpu.queues[0]);
-    wakeup(&gpu.queues[1]);
+    uint32 interrupt_status = *R(1, VIRTIO_MMIO_INTERRUPT_STATUS);
+    if (interrupt_status == 1){
+      wakeup(&gpu.queues[0]);
+      wakeup(&gpu.queues[1]);
+    }
 
   release(&gpu.lock);
 }
