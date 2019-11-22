@@ -229,3 +229,5 @@ void virtio_gpu_init(int);
 void update_frame_buffer(uint64, int);
 void update_cursor(int, int, uint64, int);
 void move_cursor(int, int, int);
+void initialize_display(uint64);
+void initialize_cursor();

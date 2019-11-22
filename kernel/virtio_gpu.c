@@ -12,7 +12,6 @@
 #include "display.h"
 
 #define R(n, r) ((volatile uint32 *)(VIRTION(n) + (r)))
-#define RECTTEST 20
 #define NUMQS 2
 #define FRAME_BUFFER_RESOURCE_ID 1
 #define CURSOR_RESOURCE_ID 2
@@ -132,8 +131,6 @@ virtio_gpu_init(int n)
 
   gpu.init = 1;
   virtio_gpu_get_config();
-  initialize_display();
-  initialize_cursor();
 }
 
 void
@@ -344,6 +341,7 @@ attach_frame_buffer(int q, uint64 fb, int frame_width, int frame_height, int res
   send_on_queue(q, descidx, should_sleep);
   resp = *(struct virtio_gpu_ctrl_hdr *)read_response(q,2);     
   if(resp.type != VIRTIO_GPU_RESP_OK_NODATA){
+    printf("resp=%p\n", resp.type);
     panic("virt gpu attach frame buffer"); 
   }
   free_desc(q, descidx, 3);
@@ -642,8 +640,6 @@ update_frame_buffer(uint64 framebuffer, int should_sleep)
 {
   int q = 0;
   int scanout_id = 0;
-  attach_frame_buffer(q, framebuffer, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, scanout_id, should_sleep);
-  set_scanout(q, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, scanout_id, scanout_id, should_sleep);
   transfer_to_host(q, 0, 0, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, scanout_id, should_sleep);
   flush(q, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, scanout_id, should_sleep);
 }
@@ -655,9 +651,11 @@ initialize_cursor()
 }
 
 void
-initialize_display(){
+initialize_display(uint64 framebuffer){
   get_display_info(0, VIRTIO_GPU_FLAG_FENCE, 0);
   create_resource(0, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, 0, 0);
+  attach_frame_buffer(0, framebuffer, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, VIRTIO_GPU_FLAG_FENCE, 0);
+  set_scanout(0, FRAME_WIDTH, FRAME_HEIGHT, FRAME_BUFFER_RESOURCE_ID, 0, VIRTIO_GPU_FLAG_FENCE, 0);
 }
 
 void

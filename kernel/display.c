@@ -14,6 +14,7 @@
 struct cursor dcursor;
 struct frame dframe;
 
+void draw_rect(int xpos, int ypos, int width, int height, uint32 color, uint8 alpha);
 void print_frame();
 
 void
@@ -26,6 +27,7 @@ init_cursor()
   dcursor.width = CURSOR_WIDTH;
   dcursor.frame_buf = kdisplaymem();
   memmove(dcursor.frame_buf, cursor_frame, CURSOR_WIDTH*CURSOR_HEIGHT*4);
+  initialize_cursor();
   update_cursor(CURSOR_START_X, CURSOR_START_Y, (uint64)dcursor.frame_buf, 0);
   printf("cursor initialized\n");
 }
@@ -50,7 +52,9 @@ update_cursor_rel(int xrel, int yrel)
     dcursor.ypos += yrel;
   }
   release(&dcursor.lock);
-  move_cursor(dcursor.xpos, dcursor.ypos, 0);
+  /*move_cursor(dcursor.xpos, dcursor.ypos, 0);*/
+  draw_rect(dcursor.xpos, dcursor.ypos, 5, 5, C_AQUA, 255);
+  update_frame_buffer((uint64)dframe.frame_buf, 0);
 }
 
 void
@@ -83,6 +87,7 @@ void init_frame()
   dframe.height = FRAME_HEIGHT;
   dframe.width = FRAME_WIDTH;
   memset(dframe.frame_buf, 0, sizeof(char) * FRAME_DATA_SIZE);
+  initialize_display((uint64)dframe.frame_buf);
   update_frame_buffer((uint64)dframe.frame_buf, 0);
 }
 
