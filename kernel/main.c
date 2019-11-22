@@ -7,7 +7,6 @@
 #include "fs.h"
 #include "file.h"
 #include "defs.h"
-#include "display.h"
 
 volatile static int started = 0;
 

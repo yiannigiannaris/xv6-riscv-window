@@ -19,12 +19,3 @@ struct frame {
   uint32 *frame_buf;
 };
 
-
-void          init_cursor(void);
-void          update_cursor_rel(int, int);
-void          update_cursor_abs(int, int);
-
-void          init_frame(void);
-void*         get_frame_buf();
-void*         get_cursor_frame_buf();
-

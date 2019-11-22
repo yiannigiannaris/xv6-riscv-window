@@ -269,7 +269,7 @@ create_resource(int q, int frame_width, int frame_height, int resource_id, uint3
   {
     .hdr = ctrl_hdr,
     .resource_id = resource_id,
-    .format = VIRTIO_GPU_FORMAT_A8R8G8B8_UNORM,
+    .format = VIRTIO_GPU_FORMAT_A8B8G8R8_UNORM,
     .width = frame_width,
     .height = frame_height,
   };
