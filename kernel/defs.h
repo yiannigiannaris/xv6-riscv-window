@@ -196,6 +196,8 @@ void            init_frame(void);
 void*           get_frame_buf();
 void*           get_cursor_frame_buf();
 void            display_test(int);
+void            send_cursor_update(void);
+void            cursor_left_click_press(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

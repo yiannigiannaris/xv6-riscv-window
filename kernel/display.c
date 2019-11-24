@@ -16,6 +16,7 @@ struct frame dframe;
 
 void draw_rect(int xpos, int ypos, int width, int height, uint32 color, uint8 alpha);
 void print_frame();
+void draw_window(int xpos, int ypos, int width, int height);
 
 void
 init_cursor()
@@ -30,6 +31,25 @@ init_cursor()
   initialize_cursor();
   update_cursor(CURSOR_START_X, CURSOR_START_Y, (uint64)dcursor.frame_buf, 0);
   printf("cursor initialized\n");
+}
+
+void
+cursor_left_click_press()
+{
+  draw_window(dcursor.xpos, dcursor.ypos, 300, 200);
+  update_frame_buffer((uint64)dframe.frame_buf, 0);
+  /*dcursor.xpos = 700;*/
+  /*dcursor.ypos = 700;*/
+  /*move_cursor(dcursor.xpos, dcursor.ypos, 0);*/
+}
+
+
+void
+send_cursor_update()
+{
+  move_cursor(dcursor.xpos, dcursor.ypos, 0);
+  /*draw_rect(dcursor.xpos, dcursor.ypos, 5, 5, C_AQUA, 255);*/
+  /*update_frame_buffer((uint64)dframe.frame_buf, 0);*/
 }
 
 void
@@ -52,9 +72,8 @@ update_cursor_rel(int xrel, int yrel)
     dcursor.ypos += yrel;
   }
   release(&dcursor.lock);
-  /*move_cursor(dcursor.xpos, dcursor.ypos, 0);*/
-  draw_rect(dcursor.xpos, dcursor.ypos, 5, 5, C_AQUA, 255);
-  update_frame_buffer((uint64)dframe.frame_buf, 0);
+  /*draw_rect(dcursor.xpos, dcursor.ypos, 5, 5, C_AQUA, 255);*/
+  /*update_frame_buffer((uint64)dframe.frame_buf, 0);*/
 }
 
 void
@@ -215,10 +234,10 @@ draw_window(int xpos, int ypos, int width, int height)
     ypos = FRAME_HEIGHT - height;
   
   draw_rect(xpos, ypos, width, height, C_WINDOW_GRAY, 255);
-  draw_rect(xpos+4, ypos+4, width-8, height-8, C_BLACK, 255);
-  draw_rect(xpos, ypos, width, 40, C_WINDOW_GRAY, 255);
-  draw_rect(xpos+4, ypos+4, 32, 32, C_BLACK, 255);
-  draw_rect(xpos+6, ypos+6, 28, 28, C_WINDOW_RED, 255);
+  draw_rect(xpos+4, ypos+4, width-8, height-8, C_AQUA, 255);
+  draw_rect(xpos, ypos, width, 30, C_WINDOW_GRAY, 255);
+  draw_rect(xpos+4, ypos+4, 22, 22, C_BLACK, 255);
+  draw_rect(xpos+6, ypos+6, 18, 18, C_WINDOW_RED, 255);
 }
 
 void
