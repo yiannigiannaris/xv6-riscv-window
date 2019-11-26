@@ -680,11 +680,3 @@ virtio_gpu_intr(){
   release(&gpu.lock);
 }
 
-void create_send_rectangle(){
-  update_frame_buffer((uint64)gpu.framebuffer, 1);
-}
-
-void create_send_mouse()
-{
-  update_cursor(20, 20, (uint64)get_cursor_frame_buf(), 1);
-}

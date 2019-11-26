@@ -28,6 +28,8 @@ int crash(const char*, int);
 int mount(char*, char *);
 int umount(char*);
 int testgraphics(void);
+uint64 mkwindow(int *fdp);
+int updatewindow(int fd, int width, int height);
 
 // ulib.c
 int stat(const char*, struct stat*);

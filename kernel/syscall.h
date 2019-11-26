@@ -28,3 +28,4 @@
 #define SYS_umount 25
 #define SYS_testgraphics 26
 #define SYS_mkwindow 27
+#define SYS_updatewindow 28

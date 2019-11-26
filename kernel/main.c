@@ -36,6 +36,7 @@ main()
     virtio_mouse_init(minor(2));
     init_cursor();
     init_frame();
+    init_windows();
     /*virtio_mouse_recv_events(minor(2));*/
     userinit();      // first user process
     __sync_synchronize();

@@ -13,3 +13,14 @@
 #define MAXPATH      128   // maximum file path name
 #define NDISK        2
 #define NWINDOW      5
+
+#define FRAME_WIDTH 1024
+#define FRAME_HEIGHT 1024
+#define CURSOR_WIDTH 64
+#define CURSOR_HEIGHT 64
+#define CURSOR_START_X (FRAME_WIDTH / 2)
+#define CURSOR_START_Y (FRAME_HEIGHT / 2)
+#define W_BORDER_SIZE 4
+#define W_HEADER_SIZE 30
+#define MAX_WINDOWS 10
+

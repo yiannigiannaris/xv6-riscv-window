@@ -14,7 +14,6 @@
 struct cursor dcursor;
 struct frame dframe;
 
-void draw_rect(int xpos, int ypos, int width, int height, uint32 color, uint8 alpha);
 void print_frame();
 void draw_window(int xpos, int ypos, int width, int height);
 
@@ -34,13 +33,9 @@ init_cursor()
 }
 
 void
-cursor_left_click_press()
+send_frame_update()
 {
-  draw_window(dcursor.xpos, dcursor.ypos, 300, 200);
   update_frame_buffer((uint64)dframe.frame_buf, 0);
-  /*dcursor.xpos = 700;*/
-  /*dcursor.ypos = 700;*/
-  /*move_cursor(dcursor.xpos, dcursor.ypos, 0);*/
 }
 
 
@@ -48,8 +43,6 @@ void
 send_cursor_update()
 {
   move_cursor(dcursor.xpos, dcursor.ypos, 0);
-  /*draw_rect(dcursor.xpos, dcursor.ypos, 5, 5, C_AQUA, 255);*/
-  /*update_frame_buffer((uint64)dframe.frame_buf, 0);*/
 }
 
 void
@@ -72,8 +65,6 @@ update_cursor_rel(int xrel, int yrel)
     dcursor.ypos += yrel;
   }
   release(&dcursor.lock);
-  /*draw_rect(dcursor.xpos, dcursor.ypos, 5, 5, C_AQUA, 255);*/
-  /*update_frame_buffer((uint64)dframe.frame_buf, 0);*/
 }
 
 void
@@ -96,7 +87,6 @@ update_cursor_abs(int xabs, int yabs)
     dcursor.ypos = yabs;
   }
   release(&dcursor.lock);
-  move_cursor(dcursor.xpos, dcursor.ypos, 0);
 }
 
 void init_frame()
@@ -110,16 +100,11 @@ void init_frame()
   update_frame_buffer((uint64)dframe.frame_buf, 0);
 }
 
-void*
-get_frame_buf()
+void
+set_pixel_hex(int x, int y, uint32 rgba)
 {
-  return (void*) dframe.frame_buf;
-}
-
-void*
-get_cursor_frame_buf()
-{
-  return (void*) dcursor.frame_buf;
+  if((y >= 0 && y < FRAME_HEIGHT) && (x >= 0 && x ))
+    *(dframe.frame_buf + y * FRAME_WIDTH + x) = rgba;
 }
 
 void

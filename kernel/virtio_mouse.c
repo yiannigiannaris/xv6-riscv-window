@@ -294,7 +294,6 @@ virtio_mouse_handle_key_event(uint16 code, uint32 value)
       printf("left click");
       if(value == 1){
         printf("[pressed]\n");
-        cursor_left_click_press();
       } else if(value == 0) {
         printf("[released]\n");
       } else {

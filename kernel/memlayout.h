@@ -46,10 +46,11 @@
 // the kernel expects there to be RAM
 // for use by the kernel and user pages
 // from physical address 0x80000000 to PHYSTOP.
-#define FRAME_DATA_SIZE (1024 * 1024 * 4)
-#define CURSOR_DATA_SIZE (64*64*4)
+#define FRAME_DATA_SIZE (FRAME_WIDTH * FRAME_HEIGHT * 4)
+#define CURSOR_DATA_SIZE (CURSOR_WIDTH * CURSOR_HEIGHT * 4)
+#define WINDOW_FRAMES_DATA_SIZE (FRAME_DATA_SIZE * MAX_WINDOWS)
 #define KERNBASE 0x80000000L
-#define PHYSTOP (KERNBASE + 128*1024*1024)
+#define PHYSTOP (KERNBASE + 2*128*1024*1024)
 
 // map the trampoline page to the highest address,
 // in both user and kernel space.

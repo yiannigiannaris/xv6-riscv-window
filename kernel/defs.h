@@ -200,11 +200,19 @@ void            init_cursor(void);
 void            update_cursor_rel(int, int);
 void            update_cursor_abs(int, int);
 void            init_frame(void);
-void*           get_frame_buf();
-void*           get_cursor_frame_buf();
-void            display_test(int);
 void            send_cursor_update(void);
-void            cursor_left_click_press(void);
+void            send_frame_update(void);
+void            set_pixel_hex(int, int, uint32);
+void            set_pixel(int, int, uint32, uint32);
+void            draw_rect(int, int, int, int, uint32, uint8);
+void            draw_line(int, int, int, int, uint32, uint8);
+void            draw_circle(int, int, int, uint32, uint8);
+
+
+// windows.c
+void            init_windows(void);
+uint64          new_window(struct file*, struct file*);
+int             update_window(struct file*, int, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

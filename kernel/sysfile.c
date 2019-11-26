@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "memlayout.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -500,4 +501,62 @@ sys_crash(void)
   iunlockput(ip);
   crash_op(ip->dev, crash);
   return 0;
+}
+
+
+uint64
+sys_mkwindow(void)
+{
+  struct proc *p = myproc();
+  struct file *rf;
+  struct file *wf;
+  uint64 rfdp;
+  if(argaddr(0, &rfdp) < 0)
+    return -1;
+  printf("rfdp=%p\n", rfdp);
+  if(w_pipealloc(&rf, &wf) < 0)
+    return -1;
+  int rfd;
+  if((rfd = fdalloc(rf)) < 0){
+    kfree((char*)rf->w_pipe);
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  if(copyout(p->pagetable, rfdp, (char*)&rfd, sizeof(rfd)) < 0){
+    kfree((char*)rf->w_pipe);
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  uint64 frame_buf;
+  if((frame_buf = new_window(rf, wf)) == 0){
+    kfree((char*)rf->w_pipe);
+    p->ofile[rfd] = 0;
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  int flags = PTE_U | PTE_R | PTE_W;
+  if(mappages(p->pagetable, p->sz, FRAME_DATA_SIZE, frame_buf, flags) < 0){
+    kfree((char*)rf->w_pipe);
+    p->ofile[rfd] = 0;
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  uint64 ret = p->sz;
+  p->sz += FRAME_DATA_SIZE;
+  p->nwindows++;
+  return ret;
+}
+
+uint64
+sys_updatewindow(void)
+{
+  int rfd, width, height;
+  struct file *rf;  
+  if(argfd(0, &rfd, &rf) < 0 || argint(1, &width) < 0 || argint(2, &height) < 0)
+    return -1;
+  return update_window(rf, width, height);
 }
