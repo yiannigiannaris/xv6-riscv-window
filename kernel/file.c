@@ -75,6 +75,8 @@ fileclose(struct file *f)
 
   if(ff.type == FD_PIPE){
     pipeclose(ff.pipe, ff.writable);
+  } else if (ff.type == FD_W_PIPE){
+    w_pipeclose(ff.w_pipe, ff.writable);
   } else if(ff.type == FD_INODE || ff.type == FD_DEVICE){
     begin_op(ff.ip->dev);
     iput(ff.ip);
@@ -113,6 +115,8 @@ fileread(struct file *f, uint64 addr, int n)
 
   if(f->type == FD_PIPE){
     r = piperead(f->pipe, addr, n);
+  } else if(f->type == FD_W_PIPE){
+    r = w_piperead(f->w_pipe, addr);  
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].read)
       return -1;
@@ -141,6 +145,8 @@ filewrite(struct file *f, uint64 addr, int n)
 
   if(f->type == FD_PIPE){
     ret = pipewrite(f->pipe, addr, n);
+  } else if (f->type == FD_W_PIPE){
+    ret = w_pipewrite(f->w_pipe, addr);
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].write)
       return -1;

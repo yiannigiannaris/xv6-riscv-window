@@ -24,6 +24,7 @@ OBJS = \
   $K/sleeplock.o \
   $K/file.o \
   $K/pipe.o \
+  $K/w_pipe.o \
   $K/exec.o \
   $K/sysfile.o \
   $K/kernelvec.o \
