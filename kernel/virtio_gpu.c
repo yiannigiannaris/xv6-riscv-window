@@ -619,6 +619,16 @@ move_cursor_cmd(int q, int x, int y, int resource_id, int scanout_id, uint32 fla
 
 
 void
+update_cursor2(int x, int y, uint64 framebuffer, int should_sleep)
+{
+  int q = 0;
+  int scanout_id = 0;
+  q = 1;
+  update_cursor_cmd(q, x, y, CURSOR_RESOURCE_ID, scanout_id, VIRTIO_GPU_FLAG_FENCE, should_sleep);
+}
+
+
+void
 update_cursor(int x, int y, uint64 framebuffer, int should_sleep)
 {
   int q = 0;

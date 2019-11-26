@@ -103,3 +103,4 @@ sys_testgraphics(void)
   create_send_mouse(1);
   return 0;
 }
+

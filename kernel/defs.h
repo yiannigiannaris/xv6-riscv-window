@@ -233,3 +233,4 @@ void update_cursor(int, int, uint64, int);
 void move_cursor(int, int, int);
 void initialize_display(uint64);
 void initialize_cursor();
+void update_cursor2(int, int, uint64, int);

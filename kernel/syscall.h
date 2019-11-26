@@ -27,3 +27,4 @@
 #define SYS_mount  24
 #define SYS_umount 25
 #define SYS_testgraphics 26
+#define SYS_mkwindow 27

@@ -302,7 +302,7 @@ virtio_mouse_handle_key_event(uint16 code, uint32 value)
       }
       break;
     case BTN_RIGHT:
-      printf("left click");
+      printf("right click");
       if(value == 1){
         printf("[pressed]\n");
       } else if(value == 0) {
