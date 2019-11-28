@@ -7,13 +7,12 @@ typedef int (*mouse_left_click_handle)(void);
 typedef int (*mouse_right_click_handle)(void);
 
 struct state{
-  struct elmt *elmts[MAX_ELMTS];
-
+  struct elmt *head_elmt;
+  uint elmt_count;
 };
 
 struct gui_window{
   struct state *states[MAX_STATES];
-  uint elmt_count;
   uint64 frame_buffer;
 };
 

@@ -151,6 +151,7 @@ UPROGS=\
 	$U/_alloctest\
 	$U/_graphicstest\
 	$U/_windowstest\
+	$U/_gui\
 
 fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes $(UPROGS)
 	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes $(UPROGS)
