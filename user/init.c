@@ -5,7 +5,11 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
+<<<<<<< HEAD
 char *argv[] = { "windowstest", 0 };
+=======
+char *argv[] = { "sh", 0 };
+>>>>>>> initial genfonts
 
 int
 main(void)
@@ -22,18 +26,19 @@ main(void)
 
   //for(;;){
   printf("init: starting sh\n");
-	pid = fork();
-	if(pid < 0){
-	  printf("init: fork failed\n");
-	  exit(1);
-	}
-	if(pid == 0){
-	  exec("windowstest", argv);
-	  printf("init: exec sh failed\n");
-	  exit(1);
-	 }
-	 //while((wpid=wait(0)) >= 0 && wpid != pid){
-	   //printf("zombie!\n");
+  pid = fork();
+  if(pid < 0){
+    printf("init: fork failed\n");
+    exit(1);
+  }
+  if(pid == 0){
+    exec("sh", argv);
+    printf("init: exec sh failed\n");
+    while (1){}
+    exit(1);
+  }
+  //while((wpid=wait(0)) >= 0 && wpid != pid){
+    //printf("zombie!\n");
   //}
   while (1){}
 	//}
