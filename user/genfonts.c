@@ -4,6 +4,7 @@
 
 #define READSZ 512
 #define LINESZ 512
+#define NUMFONTS 5
 
 char bytes[READSZ];
 int byteidx = READSZ;
@@ -103,6 +104,7 @@ int hexadecimalToDecimal(char hexVal[])
 
 void
 parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
+  byteidx = READSZ;
   char line[LINESZ];
   uint8 encoding = 0;
   uint64 *bitmap = 0; 
@@ -137,32 +139,34 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
       break;
     }
   }
+  byteidx = READSZ;
+  return;
 }
 
-
-int
-main(void)
-{
+uint64 ***
+loadfonts(void){
   printf("start main\n");
-  uint64 ***fonts = (uint64***)malloc(sizeof(uint64*)*6);
+  uint64 ***fonts = (uint64***)malloc(sizeof(uint64*)*5);
   int fd;
-  for(uint64 ***f = fonts; f < fonts + 5; f++){
+  for(uint64 ***f = fonts; f < fonts + NUMFONTS; f++){
    *f = (uint64**)malloc(sizeof(uint64*)*256);
   }
-  int font_sizes[5] = {12,18,22,28,32};
-  char *font_files[5] = {
+  int font_sizes[NUMFONTS] = {12,18,22,28,32};
+  char *font_files[NUMFONTS] = {
                     "ter-u12n.bdf",
                     "ter-u18n.bdf", 
                     "ter-u22n.bdf", 
                     "ter-u28n.bdf", 
                     "ter-u32n.bdf"}; 
-  for(int i = 0; i < 2; i++){
+  for(int i = 0; i < NUMFONTS; i++){
     if((fd = open(font_files[i], O_RDONLY)) < 0){
       printf("no fd\n");
-      exit(1);
+      return 0;
     }; 
+    printf("starting font parse for: %s\n", font_files[i]);
     parsefont(fonts, fd, font_sizes[i], i);
+    printf("finished font parse for: %s\n", font_files[i]);
     close(fd);
   }
-  exit(0);
+  return fonts;
 }
