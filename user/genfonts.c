@@ -102,6 +102,18 @@ int hexadecimalToDecimal(char hexVal[])
     return dec_val;
 }
 
+uint64
+atoui(char* s){
+  int i;
+  int neg = 1;
+  if (*s == '-'){
+    s++;
+    neg = -1;
+  }
+  i = atoi(s);
+  return (uint64)(neg * i);
+}
+
 void
 parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
   byteidx = READSZ;
@@ -110,6 +122,7 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
   uint64 *bitmap = 0; 
   int bitmapidx = -1;
   char **tokens = 0;
+  uint64 *dimensions = 0;
   while(getline(fd, line) != 0){
     maketokens(line); 
     if(tokens){
@@ -117,18 +130,41 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
     }
     tokens = parsetokens(line);
     if(!strcmp(tokens[0], "ENCODING")){
-      if((encoding = atoi(tokens[1])) >= 255){
+      if((encoding = atoui(tokens[1])) >= 255){
         break;
       } 
-      bitmap = (uint64*)malloc(sizeof(uint64)*fontsize);
+      dimensions = (uint64*)malloc(sizeof(uint64)*9); // one extra for pointer to bitmap
     }
+
+    if(!strcmp(tokens[0], "SWIDTH")){
+      dimensions[0] = (uint64)atoui(tokens[1]);
+      dimensions[1] = (uint64)atoui(tokens[2]);
+      continue;
+    }
+
+    if(!strcmp(tokens[0], "DWIDTH")){
+      dimensions[2] = (uint64)atoui(tokens[1]);
+      dimensions[3] = (uint64)atoui(tokens[2]);
+      continue;
+    }
+
+    if(!strcmp(tokens[0], "BBX")){
+      dimensions[4] = (uint64)atoui(tokens[1]);
+      dimensions[5] = (uint64)atoui(tokens[2]);
+      dimensions[6] = (uint64)atoui(tokens[3]);
+      dimensions[7] = (uint64)atoui(tokens[4]);
+      continue;
+    }
+
     if(!strcmp(tokens[0] , "BITMAP")){
       bitmapidx = 0;
+      bitmap = (uint64*)malloc(sizeof(uint64)*dimensions[5]);
+      dimensions[8] = (uint64)bitmap;
       continue;
     }
     if(!strcmp(tokens[0], "ENDCHAR")){
       bitmapidx = -1;
-      fonts[fontidx][encoding] = bitmap; 
+      fonts[fontidx][encoding] = dimensions; 
       continue;
     }
     if(bitmapidx >= 0){
@@ -139,13 +175,11 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
       break;
     }
   }
-  byteidx = READSZ;
   return;
 }
 
 uint64 ***
 loadfonts(void){
-  printf("start main\n");
   uint64 ***fonts = (uint64***)malloc(sizeof(uint64*)*5);
   int fd;
   for(uint64 ***f = fonts; f < fonts + NUMFONTS; f++){
@@ -169,4 +203,13 @@ loadfonts(void){
     close(fd);
   }
   return fonts;
+}
+
+int
+main(void)
+{
+  uint64 ***fonts;
+  if((fonts = loadfonts()) == 0)
+    exit(1);
+  exit(0);
 }
