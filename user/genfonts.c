@@ -102,39 +102,23 @@ int hexadecimalToDecimal(char hexVal[])
 }
 
 void
-parsefont(fd, font_size)
-{
-
-}
-
-
-int
-main(void)
-{
-  printf("start main\n");
-  uint64 ***fonts = (uint64***)malloc(sizeof(uint64*)*6);
-  char **tokens;
-  int fd;
-  for(uint64 ***f = fonts; f < fonts + 6; f++){
-   *f = (uint64**)malloc(sizeof(uint64*)*256);
-  }
-  if((fd = open("ter-u12n.bdf", O_RDONLY)) < 0){
-    printf("no fd\n");
-    exit(1);
-  }; 
+parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
   char line[LINESZ];
   uint8 encoding = 0;
   uint64 *bitmap = 0; 
   int bitmapidx = -1;
-  
+  char **tokens = 0;
   while(getline(fd, line) != 0){
     maketokens(line); 
+    if(tokens){
+      free(tokens);
+    }
     tokens = parsetokens(line);
     if(!strcmp(tokens[0], "ENCODING")){
       if((encoding = atoi(tokens[1])) >= 255){
         break;
       } 
-      bitmap = (uint64*)malloc(sizeof(uint64)*12);
+      bitmap = (uint64*)malloc(sizeof(uint64)*fontsize);
     }
     if(!strcmp(tokens[0] , "BITMAP")){
       bitmapidx = 0;
@@ -142,7 +126,7 @@ main(void)
     }
     if(!strcmp(tokens[0], "ENDCHAR")){
       bitmapidx = -1;
-      fonts[0][encoding] = bitmap; 
+      fonts[fontidx][encoding] = bitmap; 
       continue;
     }
     if(bitmapidx >= 0){
@@ -153,6 +137,32 @@ main(void)
       break;
     }
   }
-  close(fd);
+}
+
+
+int
+main(void)
+{
+  printf("start main\n");
+  uint64 ***fonts = (uint64***)malloc(sizeof(uint64*)*6);
+  int fd;
+  for(uint64 ***f = fonts; f < fonts + 5; f++){
+   *f = (uint64**)malloc(sizeof(uint64*)*256);
+  }
+  int font_sizes[5] = {12,18,22,28,32};
+  char *font_files[5] = {
+                    "ter-u12n.bdf",
+                    "ter-u18n.bdf", 
+                    "ter-u22n.bdf", 
+                    "ter-u28n.bdf", 
+                    "ter-u32n.bdf"}; 
+  for(int i = 0; i < 2; i++){
+    if((fd = open(font_files[i], O_RDONLY)) < 0){
+      printf("no fd\n");
+      exit(1);
+    }; 
+    parsefont(fonts, fd, font_sizes[i], i);
+    close(fd);
+  }
   exit(0);
 }
