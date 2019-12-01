@@ -103,7 +103,7 @@ int hexadecimalToDecimal(char hexVal[])
 }
 
 uint64
-atoui(char* s){
+atosi(char* s){
   int i;
   int neg = 1;
   if (*s == '-'){
@@ -130,29 +130,29 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
     }
     tokens = parsetokens(line);
     if(!strcmp(tokens[0], "ENCODING")){
-      if((encoding = atoui(tokens[1])) >= 255){
+      if((encoding = atosi(tokens[1])) >= 255){
         break;
       } 
       dimensions = (uint64*)malloc(sizeof(uint64)*9); // one extra for pointer to bitmap
     }
 
     if(!strcmp(tokens[0], "SWIDTH")){
-      dimensions[0] = (uint64)atoui(tokens[1]);
-      dimensions[1] = (uint64)atoui(tokens[2]);
+      dimensions[0] = (uint64)atosi(tokens[1]);
+      dimensions[1] = (uint64)atosi(tokens[2]);
       continue;
     }
 
     if(!strcmp(tokens[0], "DWIDTH")){
-      dimensions[2] = (uint64)atoui(tokens[1]);
-      dimensions[3] = (uint64)atoui(tokens[2]);
+      dimensions[2] = (uint64)atosi(tokens[1]);
+      dimensions[3] = (uint64)atosi(tokens[2]);
       continue;
     }
 
     if(!strcmp(tokens[0], "BBX")){
-      dimensions[4] = (uint64)atoui(tokens[1]);
-      dimensions[5] = (uint64)atoui(tokens[2]);
-      dimensions[6] = (uint64)atoui(tokens[3]);
-      dimensions[7] = (uint64)atoui(tokens[4]);
+      dimensions[4] = (uint64)atosi(tokens[1]);
+      dimensions[5] = (uint64)atosi(tokens[2]);
+      dimensions[6] = (uint64)atosi(tokens[3]);
+      dimensions[7] = (uint64)atosi(tokens[4]);
       continue;
     }
 
@@ -178,6 +178,12 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
   return;
 }
 
+void
+printcode(uint64 ***fonts)
+{
+   
+}
+
 uint64 ***
 loadfonts(void){
   uint64 ***fonts = (uint64***)malloc(sizeof(uint64*)*5);
@@ -197,9 +203,9 @@ loadfonts(void){
       printf("no fd\n");
       return 0;
     }; 
-    printf("starting font parse for: %s\n", font_files[i]);
+    //printf("starting font parse for: %s\n", font_files[i]);
     parsefont(fonts, fd, font_sizes[i], i);
-    printf("finished font parse for: %s\n", font_files[i]);
+    //printf("finished font parse for: %s\n", font_files[i]);
     close(fd);
   }
   return fonts;
