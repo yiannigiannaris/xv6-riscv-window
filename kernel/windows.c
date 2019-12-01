@@ -14,6 +14,13 @@ struct spinlock windows_lock;
 struct window *head;
 struct window windows[MAX_WINDOWS];
 
+struct {
+  int held;
+  int xanchor;
+  int yanchor;
+  struct window* win;
+} header_held;
+
 void
 init_windows()
 {
@@ -28,12 +35,49 @@ init_windows()
 }
 
 void
+print_windows()
+{
+  printf("WINDOWS PRINT:\n");
+  struct window *win = head;
+  if(!win){
+    printf("  no windows\n");
+    return;
+  }
+  do {
+    printf("%p: xpos=%d, ypos=%d, width=%d, height=%d, prev=%p, next=%p\n", win, win->xpos, win->ypos, win->width, win->height, win->prev, win->next);
+    win = win->next;
+  } while(win != head);
+}
+
+void
 get_window_outer_dims(struct window *win, int *oxpos, int *oypos, int *owidth, int *oheight)
 {
   *oxpos = win->xpos - W_BORDER_SIZE;
   *oypos = win->ypos - W_HEADER_SIZE;
   *owidth = win->width + 2*W_BORDER_SIZE;
   *oheight = win->height + W_BORDER_SIZE + W_HEADER_SIZE;
+}
+
+void
+move_window_rel(struct window *win, int xrel, int yrel)
+{
+  int oxpos, oypos, owidth, oheight;
+  get_window_outer_dims(win, &oxpos, &oypos, &owidth, &oheight);
+  if(oxpos + xrel < 0){
+    win->xpos = 0 + W_BORDER_SIZE;
+  } else if(oxpos + owidth + xrel >= FRAME_WIDTH){
+    win->xpos = FRAME_WIDTH - W_BORDER_SIZE - win->width;
+  } else {
+    win->xpos += xrel;
+  }
+
+  if(oypos + yrel < 0){
+    win->ypos = 0 + W_HEADER_SIZE;
+  } else if(oypos + oheight + yrel >= FRAME_HEIGHT){
+    win->ypos = FRAME_HEIGHT - W_BORDER_SIZE - win->width;
+  } else {
+    win->ypos += yrel;
+  }
 }
 
 void  
@@ -46,13 +90,9 @@ display_window(struct window *win)
   draw_rect(oxpos+W_BORDER_SIZE, oypos+W_BORDER_SIZE, button_size, button_size, C_BLACK, 255);
   draw_rect(oxpos+W_BORDER_SIZE+2, oypos+W_BORDER_SIZE+2, button_size-4, button_size-4, C_WINDOW_RED, 255);
   uint32 pix;
-  printf("height=%d, width=%d\n", win->height, win->width);
   for(int y = 0; y < win->height; y++){
     for(int x = 0; x < win->width; x++){
       pix = *(win->frame_buf + y * win->width + x);
-      /*if((y * win->width + x) % 100 == 0){*/
-        /*printf("x=%d, y=%d, pix=%p\n", x, y, ((uint64)pix) & 0x00000000FFFFFFFF);*/
-      /*}*/
       set_pixel_hex(win->xpos + x, win->ypos + y, pix);
     }
   }
@@ -61,14 +101,16 @@ display_window(struct window *win)
 void
 display_windows()
 {
+  draw_wallpaper();
   struct window *win = head;
   if(!win)
     return;
-  
+
+  win = win->prev;
   do {
     display_window(win);
-    win = win->next;
-  } while(win != head);
+    win = win->prev;
+  } while(win != head->prev);
 
   send_frame_update();
 }
@@ -136,6 +178,7 @@ focus_window(struct window* win)
   win->next = head;
   head->prev->next = win;
   head->prev = win;
+  head = win;
 }
 
 int
@@ -153,3 +196,76 @@ update_window(struct file *rf, int width, int height)
   release(&windows_lock);
   return 0;
 }
+
+int
+is_pos_in_window(struct window* win, int xpos, int ypos)
+{
+  int oxpos, oypos, owidth, oheight;
+  get_window_outer_dims(win, &oxpos, &oypos, &owidth, &oheight);
+  if(xpos >= oxpos && xpos < oxpos + owidth && ypos >= oypos && ypos < oypos + oheight)
+    return 1;
+  return 0;
+}
+
+int
+is_pos_in_header(struct window* win, int xpos, int ypos)
+{
+  if(is_pos_in_window(win, xpos, ypos) && ypos < win->ypos)
+    return 1;
+  return 0;
+}
+
+void
+handle_left_click_press_focused(struct window* win, int xpos, int ypos)
+{
+  if(!is_pos_in_header(win, xpos, ypos))
+    return;
+  header_held.held = 1;
+  header_held.win = win;
+  header_held.xanchor = xpos;
+  header_held.yanchor = ypos;
+}
+
+
+void
+handle_left_click_press(int xpos, int ypos)
+{
+  struct window* win = head;
+  if(!win)
+    return;
+  if(is_pos_in_window(win, xpos, ypos)){
+    handle_left_click_press_focused(win, xpos, ypos);
+    return;
+  }
+
+  win = win->next;
+  while(win != head) {
+    if(is_pos_in_window(win, xpos, ypos)){
+      focus_window(win);
+      display_windows();
+      return;
+    }
+    win = win->next;
+  } 
+}
+
+void
+handle_left_click_release()
+{
+  header_held.held = 0;
+}
+
+void
+handle_cursor_move(int xpos, int ypos)
+{
+  if(!header_held.held)
+    return;
+  int xrel = xpos - header_held.xanchor;
+  int yrel = ypos - header_held.yanchor;
+  /*printf("window: xrel=%d, yrel=%d\n", xrel, yrel);*/
+  header_held.xanchor = xpos;
+  header_held.yanchor = ypos;
+  move_window_rel(header_held.win, xrel, yrel);
+  display_windows();
+}
+

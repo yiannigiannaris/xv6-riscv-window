@@ -33,6 +33,7 @@ OBJS = \
 	$K/virtio_mouse.o \
   $K/virtio_gpu.o \
 	$K/display.o \
+	$K/cursor.o \
 	$K/windows.o \
   $K/buddy.o \
   $K/list.o \

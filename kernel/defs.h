@@ -195,24 +195,32 @@ void            virtio_disk_intr(int);
 void            virtio_mouse_init(int);
 void            virtio_mouse_recv_events(int);
 
-// display.c
+// cursor.c
 void            init_cursor(void);
 void            update_cursor_rel(int, int);
 void            update_cursor_abs(int, int);
-void            init_frame(void);
 void            send_cursor_update(void);
+void            left_click_press(void);
+void            left_click_release(void);
+
+// display.c
+void            init_frame(void);
 void            send_frame_update(void);
 void            set_pixel_hex(int, int, uint32);
 void            set_pixel(int, int, uint32, uint32);
 void            draw_rect(int, int, int, int, uint32, uint8);
 void            draw_line(int, int, int, int, uint32, uint8);
 void            draw_circle(int, int, int, uint32, uint8);
+void            draw_wallpaper(void);
 
 
 // windows.c
 void            init_windows(void);
 uint64          new_window(struct file*, struct file*);
 int             update_window(struct file*, int, int);
+void            handle_left_click_press(int, int);
+void            handle_left_click_release();
+void            handle_cursor_move(int, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

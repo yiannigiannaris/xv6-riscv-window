@@ -25,11 +25,13 @@ main(void)
 	pid = fork();
 	if(pid < 0){
 	  printf("init: fork failed\n");
+    while(1){}
 	  exit(1);
 	}
 	if(pid == 0){
 	  exec("windowstest", argv);
 	  printf("init: exec sh failed\n");
+    while(1){}
 	  exit(1);
 	 }
 	 //while((wpid=wait(0)) >= 0 && wpid != pid){

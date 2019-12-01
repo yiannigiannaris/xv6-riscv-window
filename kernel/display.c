@@ -10,83 +10,24 @@
 #include "stat.h"
 #include "display.h"
 #include "colors.h"
+#include "wallpaper.h"
 
-struct cursor dcursor;
 struct frame dframe;
 
 void print_frame();
 void draw_window(int xpos, int ypos, int width, int height);
 
+
 void
-init_cursor()
+draw_wallpaper()
 {
-  initlock(&dcursor.lock, "cursor");
-  dcursor.xpos = CURSOR_START_X;
-  dcursor.ypos = CURSOR_START_Y;
-  dcursor.height = CURSOR_HEIGHT;
-  dcursor.width = CURSOR_WIDTH;
-  dcursor.frame_buf = kdisplaymem();
-  memmove(dcursor.frame_buf, cursor_frame, CURSOR_WIDTH*CURSOR_HEIGHT*4);
-  initialize_cursor();
-  update_cursor(CURSOR_START_X, CURSOR_START_Y, (uint64)dcursor.frame_buf, 0);
-  printf("cursor initialized\n");
+  memmove(dframe.frame_buf, wallpaper_frame, FRAME_WIDTH*FRAME_HEIGHT*4);
 }
 
 void
 send_frame_update()
 {
   update_frame_buffer((uint64)dframe.frame_buf, 0);
-}
-
-
-void
-send_cursor_update()
-{
-  move_cursor(dcursor.xpos, dcursor.ypos, 0);
-}
-
-void
-update_cursor_rel(int xrel, int yrel)
-{
-  acquire(&dcursor.lock);
-  if(dcursor.xpos + xrel < 0){
-    dcursor.xpos = 0;
-  } else if(dcursor.xpos + xrel >= dframe.width){
-    dcursor.xpos = dframe.width - 1;
-  } else {
-    dcursor.xpos += xrel;
-  }
-
-  if(dcursor.ypos + yrel < 0){
-    dcursor.ypos = 0;
-  } else if(dcursor.ypos + yrel >= dframe.height){
-    dcursor.ypos = dframe.height - 1;
-  } else {
-    dcursor.ypos += yrel;
-  }
-  release(&dcursor.lock);
-}
-
-void
-update_cursor_abs(int xabs, int yabs)
-{
-  acquire(&dcursor.lock);
-  if(xabs < 0){
-    dcursor.xpos = 0;
-  } else if(xabs >= dframe.width){
-    dcursor.xpos = dframe.width - 1;
-  } else {
-    dcursor.xpos = xabs;
-  }
-
-  if(yabs < 0){
-    dcursor.ypos = 0;
-  } else if(yabs >= dframe.height){
-    dcursor.ypos = dframe.height - 1;
-  } else {
-    dcursor.ypos = yabs;
-  }
-  release(&dcursor.lock);
 }
 
 void init_frame()
@@ -96,6 +37,7 @@ void init_frame()
   dframe.height = FRAME_HEIGHT;
   dframe.width = FRAME_WIDTH;
   memset(dframe.frame_buf, 0, sizeof(char) * FRAME_DATA_SIZE);
+  draw_wallpaper();
   initialize_display((uint64)dframe.frame_buf);
   update_frame_buffer((uint64)dframe.frame_buf, 0);
 }

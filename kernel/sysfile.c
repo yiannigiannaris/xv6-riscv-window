@@ -513,7 +513,6 @@ sys_mkwindow(void)
   uint64 rfdp;
   if(argaddr(0, &rfdp) < 0)
     return -1;
-  printf("rfdp=%p\n", rfdp);
   if(w_pipealloc(&rf, &wf) < 0)
     return -1;
   int rfd;
