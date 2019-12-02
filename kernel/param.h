@@ -15,7 +15,7 @@
 #define NWINDOW      5
 
 #define FRAME_WIDTH 1024
-#define FRAME_HEIGHT 1024
+#define FRAME_HEIGHT 768
 #define CURSOR_WIDTH 64
 #define CURSOR_HEIGHT 64
 #define CURSOR_START_X (FRAME_WIDTH / 2)

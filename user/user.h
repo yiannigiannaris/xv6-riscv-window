@@ -30,6 +30,7 @@ int umount(char*);
 int testgraphics(void);
 uint64 mkwindow(int *fdp);
 int updatewindow(int fd, int width, int height);
+void startmousehandler(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

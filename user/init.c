@@ -5,13 +5,14 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
-char *argv[] = { "windowstest", 0 };
+char *argv_win[] = { "windowstest", 0 };
+char *argv_hand[] = {"input_handler", 0};
 
 int
 main(void)
 {
   //int pid, wpid;
-  int pid;
+  int pid, pid2, wpid;
 
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
@@ -20,23 +21,31 @@ main(void)
   dup(0);  // stdout
   dup(0);  // stderr
 
-  //for(;;){
-  printf("init: starting sh\n");
-	pid = fork();
-	if(pid < 0){
-	  printf("init: fork failed\n");
-    while(1){}
-	  exit(1);
-	}
-	if(pid == 0){
-	  exec("windowstest", argv);
-	  printf("init: exec sh failed\n");
-    while(1){}
-	  exit(1);
+  for(;;){
+   printf("init: starting sh\n");
+	 pid = fork();
+	 if(pid < 0){
+     printf("fork 1 failed\n");
+	   exit(1);
 	 }
-	 //while((wpid=wait(0)) >= 0 && wpid != pid){
-	   //printf("zombie!\n");
-  //}
-  while (1){}
-	//}
+	 if(pid == 0){
+	   exec("windowstest", argv_win);
+	   printf("init: exec sh failed\n");
+	   exit(1);
+	 }
+   pid2 = fork();
+   if(pid2 < 0){
+     printf("fork 2 failed\n");
+     exit(1);
+   }
+   if(pid2 == 0){
+     exec("input_handler", argv_hand);
+     printf("start mouse handler failed\n");
+     exit(1);
+   }
+ 	 while((wpid=wait(0)) >= 0 && wpid != pid){
+	   printf("zombie!\n");
+	 }    
+   printf("end of main\n");
+  }
 }

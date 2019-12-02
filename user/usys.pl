@@ -43,3 +43,4 @@ entry("umount");
 entry("mkwindow");
 entry("updatewindow");
 entry("testgraphics");
+entry("startmousehandler");

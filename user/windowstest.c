@@ -34,6 +34,7 @@ main(void)
 
   updatewindow(fd2, width2, height2);
 
+  while(1){};
   exit(0);
 }
 

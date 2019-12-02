@@ -29,6 +29,15 @@ init_cursor()
 }
 
 void
+get_cursor_pos(int *xpos, int *ypos)
+{
+  acquire(&dcursor.lock);
+  *xpos = dcursor.xpos;
+  *ypos = dcursor.ypos;
+  release(&dcursor.lock);
+}
+
+void
 update_cursor_rel(int xrel, int yrel)
 {
   acquire(&dcursor.lock);
@@ -75,8 +84,7 @@ update_cursor_abs(int xabs, int yabs)
 void
 send_cursor_update()
 {
-  handle_cursor_move(dcursor.xpos, dcursor.ypos);
-  /*move_cursor(dcursor.xpos, dcursor.ypos, 0);*/
+  move_cursor(dcursor.xpos, dcursor.ypos, 0);
 }
 
 void
@@ -85,7 +93,6 @@ left_click_press()
   acquire(&dcursor.lock);
   dcursor.left_pressed = 1;
   release(&dcursor.lock);
-  handle_left_click_press(dcursor.xpos, dcursor.ypos);
 }
 
 void
@@ -94,7 +101,6 @@ left_click_release()
   acquire(&dcursor.lock);
   dcursor.left_pressed = 0;
   release(&dcursor.lock);
-  handle_left_click_release();
 }
 
 

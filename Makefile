@@ -32,6 +32,7 @@ OBJS = \
   $K/virtio_disk.o \
 	$K/virtio_mouse.o \
   $K/virtio_gpu.o \
+	$K/mouse_handler.o \
 	$K/display.o \
 	$K/cursor.o \
 	$K/windows.o \
@@ -152,6 +153,7 @@ UPROGS=\
 	$U/_alloctest\
 	$U/_graphicstest\
 	$U/_windowstest\
+	$U/_input_handler\
 
 fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes $(UPROGS)
 	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes $(UPROGS)

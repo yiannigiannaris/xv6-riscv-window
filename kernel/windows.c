@@ -19,6 +19,7 @@ struct {
   int xanchor;
   int yanchor;
   struct window* win;
+  int steps;
 } header_held;
 
 void
@@ -74,7 +75,7 @@ move_window_rel(struct window *win, int xrel, int yrel)
   if(oypos + yrel < 0){
     win->ypos = 0 + W_HEADER_SIZE;
   } else if(oypos + oheight + yrel >= FRAME_HEIGHT){
-    win->ypos = FRAME_HEIGHT - W_BORDER_SIZE - win->width;
+    win->ypos = FRAME_HEIGHT - W_BORDER_SIZE - win->height;
   } else {
     win->ypos += yrel;
   }
@@ -218,23 +219,29 @@ is_pos_in_header(struct window* win, int xpos, int ypos)
 void
 handle_left_click_press_focused(struct window* win, int xpos, int ypos)
 {
-  if(!is_pos_in_header(win, xpos, ypos))
+  if(!is_pos_in_header(win, xpos, ypos)){
     return;
+  }
   header_held.held = 1;
   header_held.win = win;
   header_held.xanchor = xpos;
   header_held.yanchor = ypos;
+  header_held.steps = 0;
 }
 
 
 void
 handle_left_click_press(int xpos, int ypos)
 {
+  acquire(&windows_lock);
   struct window* win = head;
-  if(!win)
+  if(!win){
+    release(&windows_lock);
     return;
+  }
   if(is_pos_in_window(win, xpos, ypos)){
     handle_left_click_press_focused(win, xpos, ypos);
+    release(&windows_lock);
     return;
   }
 
@@ -243,29 +250,50 @@ handle_left_click_press(int xpos, int ypos)
     if(is_pos_in_window(win, xpos, ypos)){
       focus_window(win);
       display_windows();
+      release(&windows_lock);
       return;
     }
     win = win->next;
   } 
+  release(&windows_lock);
 }
 
 void
-handle_left_click_release()
+handle_left_click_release(int xpos, int ypos)
 {
+  acquire(&windows_lock);
+  if(header_held.held){
+    int xrel = xpos - header_held.xanchor;
+    int yrel = ypos - header_held.yanchor;
+    header_held.xanchor = xpos;
+    header_held.yanchor = ypos;
+    move_window_rel(header_held.win, xrel, yrel);
+    display_windows();
+  }
   header_held.held = 0;
+  release(&windows_lock);
 }
 
 void
 handle_cursor_move(int xpos, int ypos)
 {
-  if(!header_held.held)
+  acquire(&windows_lock);
+  if(!header_held.held){
+    release(&windows_lock);
     return;
+  }
+  header_held.steps++;
+  printf("header_held.steps=%d\n", header_held.steps);
+  if(!(header_held.steps % 3 == 0)){
+    release(&windows_lock);
+    return;
+  }
   int xrel = xpos - header_held.xanchor;
   int yrel = ypos - header_held.yanchor;
-  /*printf("window: xrel=%d, yrel=%d\n", xrel, yrel);*/
   header_held.xanchor = xpos;
   header_held.yanchor = ypos;
   move_window_rel(header_held.win, xrel, yrel);
   display_windows();
+  release(&windows_lock);
 }
 

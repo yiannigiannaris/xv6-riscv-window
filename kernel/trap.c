@@ -192,9 +192,7 @@ devintr()
     } else if(irq == VIRTIO1_IRQ){
       virtio_gpu_intr(irq - VIRTIO1_IRQ); 
     } else if(irq == VIRTIO2_IRQ){
-      intr_off();
       virtio_mouse_recv_events(irq - VIRTIO2_IRQ);
-      intr_on();
     }
 
 

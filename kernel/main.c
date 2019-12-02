@@ -34,6 +34,7 @@ main()
     virtio_disk_init(minor(ROOTDEV)); // emulated hard disk
     virtio_gpu_init(minor(1));
     virtio_mouse_init(minor(2));
+    init_mouse_handler();
     init_cursor();
     init_frame();
     init_windows();

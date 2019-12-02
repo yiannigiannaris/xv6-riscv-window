@@ -195,8 +195,14 @@ void            virtio_disk_intr(int);
 void            virtio_mouse_init(int);
 void            virtio_mouse_recv_events(int);
 
+// mouse_handler.c
+void            init_mouse_handler(void);
+void            start_mouse_handler(void);
+void            add_mouse_handler_event(int, int, int); 
+
 // cursor.c
 void            init_cursor(void);
+void            get_cursor_pos(int*, int*);
 void            update_cursor_rel(int, int);
 void            update_cursor_abs(int, int);
 void            send_cursor_update(void);
@@ -219,7 +225,7 @@ void            init_windows(void);
 uint64          new_window(struct file*, struct file*);
 int             update_window(struct file*, int, int);
 void            handle_left_click_press(int, int);
-void            handle_left_click_release();
+void            handle_left_click_release(int, int);
 void            handle_cursor_move(int, int);
 
 // number of elements in fixed-size array

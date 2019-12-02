@@ -559,3 +559,12 @@ sys_updatewindow(void)
     return -1;
   return update_window(rf, width, height);
 }
+
+uint64
+sys_startmousehandler(void)
+{
+  intr_off();
+  start_mouse_handler();
+  intr_on();
+  return 0;
+}
