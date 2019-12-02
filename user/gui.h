@@ -2,9 +2,30 @@
 #define MAX_ELMTS 100
 #define MAX_STATES 10
 
-//Event handlers
-typedef int (*mouse_left_click_handle)(void);
-typedef int (*mouse_right_click_handle)(void);
+typedef int (*event_handler)(void);
+
+enum elmt_type {
+  BUTTON,
+  TEXTBOX,
+  TEXTBLOCK
+};
+
+struct elmt{
+  enum elmt_type type;
+  event_handler mlc;
+  event_handler mrc; 
+  uint uid;
+  uint width;
+  uint height;
+  uint x;
+  uint y;
+  uint32 fill;
+  int border;
+  uint32 border_width;
+  char text[MAX_TEXT];
+  struct elmt *next;
+  struct elmt *prev;
+};
 
 struct state{
   struct elmt *head_elmt;
@@ -15,7 +36,8 @@ struct state{
 
 struct window{
   struct state *state;
-  uint64 frame_buffer;
+  uint32* frame_buffer;
+  int fd;
   struct window* next;
   struct window* prev;
 };
@@ -23,13 +45,15 @@ struct window{
 struct gui{
   struct window* window;
   uint64 ***fonts;
-}
+};
 
-struct gui_window* new_window();
+struct window* new_window();
 
-int add_elmt(struct gui_window*, int state, struct elmt*);
-int modify_elmt(struct gui_window*, int state, struct elmt*);
-int remove_elmt(struct gui_window*, int state, struct elmt*);
-int add_state(struct gui_window*, struct state* state);
+int add_elmt(struct state*, struct elmt*);
+int remove_elmt(struct elmt*);
+int add_state(struct window*, struct state*);
+int switch_state(struct window*, struct state*);
 
-int start_event_loop(struct gui_window*, int state);
+int start_event_loop(struct window*, int state);
+struct gui* init_gui(void);
+struct window* new_window(struct gui*);

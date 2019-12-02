@@ -1,6 +1,7 @@
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
+#include "user/genfonts.h"
 
 #define READSZ 512
 #define LINESZ 512
@@ -133,7 +134,7 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
       if((encoding = atosi(tokens[1])) >= 255){
         break;
       } 
-      dimensions = (uint64*)malloc(sizeof(uint64)*9); // one extra for pointer to bitmap
+      dimensions = (uint64*)malloc(sizeof(uint64)*10); // one extra for pointer to bitmap
     }
 
     if(!strcmp(tokens[0], "SWIDTH")){
@@ -159,7 +160,7 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
     if(!strcmp(tokens[0] , "BITMAP")){
       bitmapidx = 0;
       bitmap = (uint64*)malloc(sizeof(uint64)*dimensions[5]);
-      dimensions[8] = (uint64)bitmap;
+      dimensions[9] = (uint64)bitmap;
       continue;
     }
     if(!strcmp(tokens[0], "ENDCHAR")){
@@ -168,6 +169,7 @@ parsefont(uint64 ***fonts, int fd, int fontsize, int fontidx){
       continue;
     }
     if(bitmapidx >= 0){
+     dimensions[8] = (uint64)strlen(tokens[0]);
      bitmap[bitmapidx++] = hexadecimalToDecimal(tokens[0]); 
      continue;
     }
@@ -203,14 +205,15 @@ loadfonts(void){
       printf("no fd\n");
       return 0;
     }; 
-    //printf("starting font parse for: %s\n", font_files[i]);
+    printf("starting font parse for: %s\n", font_files[i]);
     parsefont(fonts, fd, font_sizes[i], i);
-    //printf("finished font parse for: %s\n", font_files[i]);
+    printf("finished font parse for: %s\n", font_files[i]);
     close(fd);
   }
   return fonts;
 }
 
+/*
 int
 main(void)
 {
@@ -219,3 +222,4 @@ main(void)
     exit(1);
   exit(0);
 }
+*/

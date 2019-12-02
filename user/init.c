@@ -5,11 +5,8 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
-<<<<<<< HEAD
+//char *argv[] = { "sh", 0 };
 char *argv[] = { "windowstest", 0 };
-=======
-char *argv[] = { "sh", 0 };
->>>>>>> initial genfonts
 
 int
 main(void)
@@ -32,7 +29,8 @@ main(void)
     exit(1);
   }
   if(pid == 0){
-    exec("sh", argv);
+   // exec("sh", argv);
+    exec("windowstest", argv);
     printf("init: exec sh failed\n");
     while (1){}
     exit(1);

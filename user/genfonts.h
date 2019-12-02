@@ -1,1 +1,1 @@
-uint64 *** loadfonts(void);
+uint64 ***loadfonts(void);

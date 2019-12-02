@@ -5,6 +5,9 @@
 #include "kernel/fcntl.h"
 #include "kernel/memlayout.h"
 #include "user/user.h"
+#include "kernel/colors.h"
+#include "user/gui.h"
+#include "user/draw.h"
 
 int
 main(void)
@@ -21,9 +24,15 @@ main(void)
       *(frame_buf + y * width + x) = 0xFFFF00FF;
     }
   }
+  struct gui* gui = init_gui();
+  printf("finished init gui\n");
+  char string[] = "Nutter butter &#$%^&*(";
+  draw_font(frame_buf, width, height, 1, 1, gui->fonts, string, 4, strlen(string), C_BLACK, 255);  
+  printf("finished draw_font\n");
   /*printf("n=%d\n", sizeof(uint32) * width * height);*/
   /*memset(frame_buf, sizeof(uint32) * width * height, 0xff);*/
   updatewindow(fd, width, height);
+
   printf("windowstest complete\n");
   exit(0);
 }

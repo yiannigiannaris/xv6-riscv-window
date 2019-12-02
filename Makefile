@@ -92,7 +92,7 @@ $U/initcode: $U/initcode.S
 tags: $(OBJS) _init
 	etags *.S *.c
 
-ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
+ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o $U/gui.o $U/genfonts.o $U/draw.o
 
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
@@ -151,12 +151,10 @@ UPROGS=\
 	$U/_alloctest\
 	$U/_graphicstest\
 	$U/_windowstest\
-	$U/_genfonts\
   #$U/_graphicstest\
-	$U/_gui\
 
-fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes user/ter-u12n.bdf $(UPROGS)
-	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes user/ter-u12n.bdf $(UPROGS)
+fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS)
+	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS)
 
 -include kernel/*.d user/*.d
 
@@ -179,8 +177,8 @@ CPUS := 3
 endif
 
 QEMUEXTRA = -drive file=fs1.img,if=none,format=raw,id=x1 -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
-QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -nographic 
-#QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -serial file:serial.out
+#QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -nographic 
+QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -serial file:serial.out
 #QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -nographic
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -append console=ttyS0
 

@@ -1,14 +1,12 @@
 #include "kernel/types.h"
 #include "user/user.h"
-#include "elmt.h"
-#include "gui.h"
-#include "genfonts.h"
+#include "user/genfonts.h"
+#include "user/gui.h"
 
 int break_loop_flag = 0;
 
 void notify_change()
 {
-  //acquire locks, call update
   break_loop_flag = 1;
   return;
 }
@@ -36,7 +34,7 @@ int add_state(struct window* window, struct state* state)
 
 int switch_state(struct window* window, struct state* state)
 {
-  gui->state = state;
+  window->state = state;
   notify_change();
   return 0;
 }
@@ -48,7 +46,6 @@ int add_elmt(struct state* state, struct elmt* elmt)
   elmt->prev = head_elmt->prev;
   elmt->next = head_elmt;
   head_elmt->prev = elmt; 
-  //acquire locks, call update
   notify_change();
   return 0;
 }
@@ -58,7 +55,6 @@ int remove_elmt(struct elmt* elmt)
 {
  elmt->prev->next = elmt->next;
  elmt->next->prev = elmt->prev; 
- //call update
  notify_change();
  return 0;
 }
@@ -66,7 +62,8 @@ int remove_elmt(struct elmt* elmt)
 void loop(struct elmt* elmt){
   if(check_change())
     ack_change();
-  int fd = 0
+  /*(
+  int fd = 0;
   struct event e;
   for(read(fd,&e, sizeof(struct event))){
      //read mouse event
@@ -76,23 +73,27 @@ void loop(struct elmt* elmt){
        
     } 
   }
+  */
 }
 
 struct window*
 new_window(struct gui* gui)
 {
+  int fd;
+  uint32* frame_buffer = (uint32*)mkwindow(&fd); 
   struct window* win = (struct window*)malloc(sizeof(struct window*));
+  win->fd = fd;
+  win->frame_buffer = frame_buffer;
   gui->window = win;
   return 0;
 }
 
 struct gui*
-init_gui()
+init_gui(void)
 {
   struct gui *gui = (struct gui*)malloc(sizeof(gui));
-  if(!(gui->fonts = load_fonts())){
+  if(!(gui->fonts = loadfonts())){
     return 0;
   }
-  //call for framebuffer
   return gui; 
 }
