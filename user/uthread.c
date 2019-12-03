@@ -9,10 +9,12 @@
 
 #define STACK_SIZE  8192
 #define MAX_THREAD  4
+#define REG_STACK_SIZE 112
 
 struct thread {
   char       stack[STACK_SIZE]; /* the thread's stack */
   int        state;             /* FREE, RUNNING, RUNNABLE */
+  uint64 regs[REG_STACK_SIZE / 8];
 };
 struct thread all_thread[MAX_THREAD];
 struct thread *current_thread;
@@ -61,6 +63,7 @@ thread_schedule(void)
      * Invoke thread_switch to switch from t to next_thread:
      * thread_switch(??, ??);
      */
+    thread_switch((uint64)(t->regs), (uint64)(next_thread->regs));
   } else
     next_thread = 0;
 }
@@ -75,6 +78,9 @@ thread_create(void (*func)())
   }
   t->state = RUNNABLE;
   // YOUR CODE HERE
+  t->regs[0] = (uint64) func;
+  t->regs[1] = ((uint64) t->stack) + STACK_SIZE;
+  t->regs[7] = ((uint64) t->stack) + STACK_SIZE;
 }
 
 void 

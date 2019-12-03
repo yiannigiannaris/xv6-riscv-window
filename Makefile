@@ -151,6 +151,7 @@ UPROGS=\
 	$U/_alloctest\
 	$U/_graphicstest\
 	$U/_windowstest\
+	$U/_alarmtest\
   #$U/_graphicstest\
 
 fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS)

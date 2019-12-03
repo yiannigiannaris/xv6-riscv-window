@@ -29,3 +29,5 @@
 #define SYS_testgraphics 26
 #define SYS_mkwindow 27
 #define SYS_updatewindow 28
+#define SYS_sigalarm 26
+#define SYS_sigreturn 27
