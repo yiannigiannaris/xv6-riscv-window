@@ -5,6 +5,7 @@
 #include "kernel/fcntl.h"
 #include "kernel/memlayout.h"
 #include "user/user.h"
+#include "kernel/window_event.h"
 
 int
 main(void)
@@ -34,7 +35,53 @@ main(void)
 
   updatewindow(fd2, width2, height2);
 
-  while(1){};
+  int pid = fork();
+  if(pid < 0){
+    fprintf(2, "windowstest: fork() failed\n");
+    exit(-1);
+  }
+
+  if(pid == 0){
+    struct window_event *we = 0;
+    int bytes;
+    while(1){
+      if((bytes = read(fd, (void*)we, sizeof(struct window_event))) > 0){
+        switch(we->type){
+          case W_CUR_MOVE_ABS:
+            printf("YELLOW      W_CUR_MOVE_ABS: x=%d, y=%d\n", we->xval, we->yval);
+            break;
+          case W_LEFT_CLICK_PRESS:
+            printf("YELLOW      W_LEFT_CLICK_PRESSS: x=%d, y=%d\n", we->xval, we->yval);
+            break;
+          case W_LEFT_CLICK_RELEASE:
+            printf("YELLOW      W_LEFT_CLICK_RELEASE: x=%d, y=%d\n", we->xval, we->yval);
+            break;
+          default:
+            printf("YELLOW      EVENT NOT RECOGNIZED: type=%d, xval=%d, yval=%d\n", we->type, we->xval, we->yval);
+        }
+      }
+    }
+  } else {
+    struct window_event *we = 0;
+    int bytes;
+    while(1){
+      if((bytes = read(fd2, (void*)we, sizeof(struct window_event))) > 0){
+        switch(we->type){
+          case W_CUR_MOVE_ABS:
+            printf("PURPLE      W_CUR_MOVE_ABS: x=%d, y=%d\n", we->xval, we->yval);
+            break;
+          case W_LEFT_CLICK_PRESS:
+            printf("PURPLE      W_LEFT_CLICK_PRESSS: x=%d, y=%d\n", we->xval, we->yval);
+            break;
+          case W_LEFT_CLICK_RELEASE:
+            printf("PURPLE      W_LEFT_CLICK_RELEASE: x=%d, y=%d\n", we->xval, we->yval);
+            break;
+          default:
+            printf("PURPLE      EVENT NOT RECOGNIZED: type=%d, xval=%d, yval=%d\n", we->type, we->xval, we->yval);
+        }
+      }
+    }
+  }
   exit(0);
 }
 

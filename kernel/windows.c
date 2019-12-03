@@ -9,10 +9,18 @@
 #include "display.h"
 #include "colors.h"
 #include "windows.h"
+#include "window_event.h"
+#include "fs.h"
+#include "file.h"
 
 struct spinlock windows_lock;
 struct window *head;
 struct window windows[MAX_WINDOWS];
+
+struct {
+  int held;
+  struct window *win;
+} win_held;
 
 struct {
   int held;
@@ -198,6 +206,21 @@ update_window(struct file *rf, int width, int height)
   return 0;
 }
 
+void
+abs_pos_to_rel(struct window *win, int xabs, int yabs, int *xrel, int *yrel)
+{
+  *xrel = xabs - win->xpos;
+  *yrel = yabs - win->ypos;
+}
+
+int
+is_pos_in_window_frame(struct window *win, int xpos, int ypos)
+{
+  if(xpos >= win->xpos && xpos < win->xpos + win->width && ypos >= win->ypos && ypos < win->ypos + win->height)
+    return 1;
+  return 0;
+}
+
 int
 is_pos_in_window(struct window* win, int xpos, int ypos)
 {
@@ -217,16 +240,28 @@ is_pos_in_header(struct window* win, int xpos, int ypos)
 }
 
 void
-handle_left_click_press_focused(struct window* win, int xpos, int ypos)
+handle_left_click_press_header(struct window *win, int xpos, int ypos)
 {
-  if(!is_pos_in_header(win, xpos, ypos)){
-    return;
-  }
   header_held.held = 1;
   header_held.win = win;
   header_held.xanchor = xpos;
   header_held.yanchor = ypos;
   header_held.steps = 0;
+}
+
+void
+handle_left_click_press_focused(struct window* win, int xpos, int ypos)
+{
+  if(is_pos_in_header(win, xpos, ypos)){
+    handle_left_click_press_header(win, xpos, ypos);
+  } else if(is_pos_in_window_frame(win, xpos, ypos)){
+    int xrel = xpos - win->xpos;
+    int yrel = ypos - win->ypos;
+    struct window_event event = {.type = W_LEFT_CLICK_PRESS, .xval = xrel, .yval = yrel};
+    w_pipewrite(win->wf->w_pipe, (uint64)&event);
+    win_held.held = 1;
+    win_held.win = win;
+  }
 }
 
 
@@ -250,6 +285,8 @@ handle_left_click_press(int xpos, int ypos)
     if(is_pos_in_window(win, xpos, ypos)){
       focus_window(win);
       display_windows();
+      if(is_pos_in_header(win, xpos, ypos))
+        handle_left_click_press_header(win, xpos, ypos);
       release(&windows_lock);
       return;
     }
@@ -263,14 +300,20 @@ handle_left_click_release(int xpos, int ypos)
 {
   acquire(&windows_lock);
   if(header_held.held){
-    int xrel = xpos - header_held.xanchor;
-    int yrel = ypos - header_held.yanchor;
+    int xrelmove = xpos - header_held.xanchor;
+    int yrelmove = ypos - header_held.yanchor;
     header_held.xanchor = xpos;
     header_held.yanchor = ypos;
-    move_window_rel(header_held.win, xrel, yrel);
+    move_window_rel(header_held.win, xrelmove, yrelmove);
     display_windows();
+    header_held.held = 0;
+  } else if(win_held.held){
+    int xrelpos = xpos - win_held.win->xpos;
+    int yrelpos = ypos - win_held.win->ypos;
+    struct window_event event = {.type = W_LEFT_CLICK_RELEASE, .xval = xrelpos, .yval = yrelpos};
+    w_pipewrite(win_held.win->wf->w_pipe, (uint64)&event);
+    win_held.held = 0;
   }
-  header_held.held = 0;
   release(&windows_lock);
 }
 
@@ -278,22 +321,26 @@ void
 handle_cursor_move(int xpos, int ypos)
 {
   acquire(&windows_lock);
-  if(!header_held.held){
-    release(&windows_lock);
-    return;
+  if(header_held.held){
+    header_held.steps++;
+    if(!(header_held.steps % 3 == 0)){
+      release(&windows_lock);
+      return;
+    }
+    int xrelmove = xpos - header_held.xanchor;
+    int yrelmove = ypos - header_held.yanchor;
+    header_held.xanchor = xpos;
+    header_held.yanchor = ypos;
+    move_window_rel(header_held.win, xrelmove, yrelmove);
+    display_windows();
+  } else {
+    if(is_pos_in_window_frame(head, xpos, ypos)){
+      int xrelpos = xpos - head->xpos;
+      int yrelpos = ypos - head->ypos;
+      struct window_event event = {.type = W_CUR_MOVE_ABS, .xval = xrelpos, .yval = yrelpos};
+      w_pipewrite(head->wf->w_pipe, (uint64)&event);
+    }
   }
-  header_held.steps++;
-  printf("header_held.steps=%d\n", header_held.steps);
-  if(!(header_held.steps % 3 == 0)){
-    release(&windows_lock);
-    return;
-  }
-  int xrel = xpos - header_held.xanchor;
-  int yrel = ypos - header_held.yanchor;
-  header_held.xanchor = xpos;
-  header_held.yanchor = ypos;
-  move_window_rel(header_held.win, xrel, yrel);
-  display_windows();
   release(&windows_lock);
 }
 

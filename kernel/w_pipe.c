@@ -75,13 +75,15 @@ w_pipeclose(struct w_pipe *pi, int writable)
 int
 w_pipewrite(struct w_pipe *pi, uint64 addr)
 {
-  struct window_event we = *(struct window_event*)addr;  
-
+  struct window_event we = *(struct window_event*)addr;
   acquire(&pi->lock);
-  pi->data[pi->nwrite++ % PIPESIZE] = we;
-  if(pi->nwrite > pi->nread){
-    pi->nread = pi->nwrite;
+  if(pi->nwrite == pi->nread + PIPESIZE){  //DOC: pipewrite-full
+    wakeup(&pi->nread);
+    release(&pi->lock);
+    return -1;
   }
+  pi->data[pi->nwrite++ % PIPESIZE] = we;
+  wakeup(&pi->nread);
   release(&pi->lock);
   return sizeof(struct window_event);
 }
@@ -90,14 +92,26 @@ int
 w_piperead(struct w_pipe *pi, uint64 addr)
 {
   struct window_event we;
-  struct proc* pr = myproc();
+  struct proc *pr = myproc();
 
   acquire(&pi->lock);
-  if(pi->nread == pi->nwrite)
-    return -1;
+  while(pi->nread == pi->nwrite && pi->writeopen){  //DOC: pipe-empty
+    if(myproc()->killed){
+      release(&pi->lock);
+      return -1;
+    }
+    sleep(&pi->nread, &pi->lock); //DOC: piperead-sleep
+  }
+  if(pi->nread == pi->nwrite){
+    release(&pi->lock);
+    return 0;
+  }
   we = pi->data[pi->nread++ % PIPESIZE];
-  if(copyout(pr->pagetable, addr, (char*)&we,sizeof(struct window_event)) == -1)
+  if(copyout(pr->pagetable, addr, (char*)&we, sizeof(struct window_event)) == -1){
+    release(&pi->lock);
     return -1;
+  }
+  wakeup(&pi->nwrite);  //DOC: piperead-wakeup
   release(&pi->lock);
   return sizeof(struct window_event);
 }
