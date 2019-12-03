@@ -1,6 +1,7 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
+#include "user/uthread.h"
 
 /* Possible states of a thread: */
 #define FREE        0x0
@@ -153,6 +154,7 @@ thread_c(void)
   thread_schedule();
 }
 
+/*
 int 
 main(int argc, char *argv[]) 
 {
@@ -165,3 +167,4 @@ main(int argc, char *argv[])
   thread_schedule();
   exit(0);
 }
+*/

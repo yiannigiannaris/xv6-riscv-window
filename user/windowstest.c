@@ -7,10 +7,11 @@
 #include "user/user.h"
 #include "kernel/colors.h"
 #include "user/gui.h"
+#include "user/uthread.h"
 
 
 void
-pop_button(struct *elmt button)
+pop_button(struct elmt *button)
 {
   button->width = 100;
   button->height = 50;
@@ -31,7 +32,7 @@ pop_button(struct *elmt button)
 }
 
 void
-pop_textbox(struct *elmt textbox)
+pop_textbox(struct elmt* textbox)
 {
   textbox->width = 200;
   textbox->height = 20;
