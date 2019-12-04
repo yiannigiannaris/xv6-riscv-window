@@ -44,3 +44,5 @@ entry("mkwindow");
 entry("updatewindow");
 entry("testgraphics");
 entry("startmousehandler");
+entry("sigalarm");
+entry("sigreturn");

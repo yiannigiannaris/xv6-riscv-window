@@ -104,4 +104,8 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int nwindows;
+  int almint;
+  uint64 almhandler;
+  int tickcount;
+  struct trapframe *stf;
 };

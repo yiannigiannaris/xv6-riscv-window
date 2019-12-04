@@ -103,3 +103,18 @@ sys_testgraphics(void)
   return 0;
 }
 
+
+uint64
+sys_sigalarm(void)
+{
+  argint(0, &myproc()->almint);
+  argaddr(1, &myproc()->almhandler);
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  *myproc()->tf = *myproc()->stf;
+  return 0;
+}

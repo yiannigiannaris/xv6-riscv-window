@@ -110,6 +110,8 @@ extern uint64 sys_testgraphics(void);
 extern uint64 sys_mkwindow(void);
 extern uint64 sys_updatewindow(void);
 extern uint64 sys_startmousehandler(void);
+extern uint64 sys_sigalarm(void);
+extern uint64 sys_sigreturn(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -139,6 +141,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkwindow] sys_mkwindow,
 [SYS_updatewindow] sys_updatewindow,
 [SYS_startmousehandler] sys_startmousehandler,
+[SYS_sigalarm] sys_sigalarm,
+[SYS_sigreturn] sys_sigreturn,
 };
 
 void

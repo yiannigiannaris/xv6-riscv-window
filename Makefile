@@ -55,7 +55,7 @@ TOOLPREFIX := $(shell if riscv64-unknown-elf-objdump -i 2>&1 | grep 'elf64-big' 
 	echo "***" 1>&2; exit 1; fi)
 endif
 
-QEMU = /Users/robertdelaus/Documents/6.828/project/qemu/riscv64-softmmu/qemu-system-riscv64
+QEMU = /Users/yiannigiannaris/Documents/School/6.828/qemu/riscv64-softmmu/qemu-system-riscv64
 
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
@@ -94,7 +94,7 @@ $U/initcode: $U/initcode.S
 tags: $(OBJS) _init
 	etags *.S *.c
 
-ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
+ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o $U/gui.o $U/genfonts.o $U/draw.o
 
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
@@ -154,9 +154,11 @@ UPROGS=\
 	$U/_graphicstest\
 	$U/_windowstest\
 	$U/_input_handler\
+	$U/_alarmtest\
+  #$U/_graphicstest\
 
-fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes $(UPROGS)
-	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes $(UPROGS)
+fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS)
+	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS)
 
 -include kernel/*.d user/*.d
 
@@ -179,9 +181,10 @@ CPUS := 3
 endif
 
 QEMUEXTRA = -drive file=fs1.img,if=none,format=raw,id=x1 -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
-QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS)
+#QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -nographic 
+QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -serial file:serial.out
 #QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -nographic
-QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -append console=ttyS0, -serial file:serial.out
+QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -append console=ttyS0
 
 qemu: $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)

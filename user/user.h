@@ -31,6 +31,8 @@ int testgraphics(void);
 uint64 mkwindow(int *fdp);
 int updatewindow(int fd, int width, int height);
 void startmousehandler(void);
+int sigalarm(int ticks, void(*handler)());
+int sigreturn(void);
 
 // ulib.c
 int stat(const char*, struct stat*);
