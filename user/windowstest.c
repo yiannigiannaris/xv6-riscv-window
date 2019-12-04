@@ -46,18 +46,22 @@ main(void)
     int bytes;
     while(1){
       if((bytes = read(fd, (void*)we, sizeof(struct window_event))) > 0){
-        switch(we->type){
-          case W_CUR_MOVE_ABS:
-            printf("YELLOW      W_CUR_MOVE_ABS: x=%d, y=%d\n", we->xval, we->yval);
-            break;
-          case W_LEFT_CLICK_PRESS:
-            printf("YELLOW      W_LEFT_CLICK_PRESSS: x=%d, y=%d\n", we->xval, we->yval);
-            break;
-          case W_LEFT_CLICK_RELEASE:
-            printf("YELLOW      W_LEFT_CLICK_RELEASE: x=%d, y=%d\n", we->xval, we->yval);
-            break;
-          default:
-            printf("YELLOW      EVENT NOT RECOGNIZED: type=%d, xval=%d, yval=%d\n", we->type, we->xval, we->yval);
+        if(we->kind == W_KIND_MOUSE){
+          switch(we->m_event.type){
+            case W_CUR_MOVE_ABS:
+              printf("YELLOW      W_CUR_MOVE_ABS: timestamp=%d, x=%d, y=%d\n",we->timestamp, we->m_event.xval, we->m_event.yval);
+              break;
+            case W_LEFT_CLICK_PRESS:
+              printf("YELLOW      W_LEFT_CLICK_PRESSS: timestamp=%d, x=%d, y=%d\n",we->timestamp, we->m_event.xval, we->m_event.yval);
+              break;
+            case W_LEFT_CLICK_RELEASE:
+              printf("YELLOW      W_LEFT_CLICK_RELEASE: timestamp=%d, x=%d, y=%d\n",we->timestamp, we->m_event.xval, we->m_event.yval);
+              break;
+            default:
+              printf("YELLOW      EVENT NOT RECOGNIZED: timestamp=%d, type=%d, xval=%d, yval=%d\n",we->timestamp, we->m_event.type, we->m_event.xval, we->m_event.yval);
+          }
+        } else {
+          printf("YELLOW      KEYBOARD: timestamp=%d, character=%c\n",we->timestamp, we->k_event.ascii_val);
         }
       }
     }
@@ -66,18 +70,22 @@ main(void)
     int bytes;
     while(1){
       if((bytes = read(fd2, (void*)we, sizeof(struct window_event))) > 0){
-        switch(we->type){
-          case W_CUR_MOVE_ABS:
-            printf("PURPLE      W_CUR_MOVE_ABS: x=%d, y=%d\n", we->xval, we->yval);
-            break;
-          case W_LEFT_CLICK_PRESS:
-            printf("PURPLE      W_LEFT_CLICK_PRESSS: x=%d, y=%d\n", we->xval, we->yval);
-            break;
-          case W_LEFT_CLICK_RELEASE:
-            printf("PURPLE      W_LEFT_CLICK_RELEASE: x=%d, y=%d\n", we->xval, we->yval);
-            break;
-          default:
-            printf("PURPLE      EVENT NOT RECOGNIZED: type=%d, xval=%d, yval=%d\n", we->type, we->xval, we->yval);
+        if(we->kind == W_KIND_MOUSE){
+          switch(we->m_event.type){
+            case W_CUR_MOVE_ABS:
+              printf("PURPLE      W_CUR_MOVE_ABS: timestamp=%d, x=%d, y=%d\n",we->timestamp, we->m_event.xval, we->m_event.yval);
+              break;
+            case W_LEFT_CLICK_PRESS:
+              printf("PURPLE      W_LEFT_CLICK_PRESSS: timestamp=%d, x=%d, y=%d\n",we->timestamp, we->m_event.xval, we->m_event.yval);
+              break;
+            case W_LEFT_CLICK_RELEASE:
+              printf("PURPLE      W_LEFT_CLICK_RELEASE: timestamp=%d, x=%d, y=%d\n",we->timestamp, we->m_event.xval, we->m_event.yval);
+              break;
+            default:
+              printf("PURPLE      EVENT NOT RECOGNIZED: timestamp=%d, type=%d, xval=%d, yval=%d\n",we->timestamp, we->m_event.type, we->m_event.xval, we->m_event.yval);
+          }
+        } else{
+          printf("PURPLE      KEYBOARD: timestamp=%d, character=%c\n",we->timestamp, we->k_event.ascii_val);
         }
       }
     }

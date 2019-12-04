@@ -9,9 +9,8 @@
 #include "buf.h"
 #include "virtio.h"
 #include "events.h"
-#include "mouse_handler.h"
+#include "input_handler.h"
 
-#define NUM_MOUSE_MOUSE_EVENTS 10
 #define R(n, r) ((volatile uint32 *)(VIRTION(n) + (r)))
 
 #define NUM_MOUSE_KEY_SUPPORTED 2
@@ -39,7 +38,7 @@ struct virtio_input_event {
 	uint32 value;
 };
 
-struct virtio_input_event event_bufs[NUM_MOUSE];
+struct virtio_input_event mouse_event_bufs[NUM_MOUSE];
 
 struct {
     char pages_event[2*PGSIZE];
@@ -254,7 +253,7 @@ void
 virtio_mouse_fill_event_queue(int n)
 { 
   for(int i = 0; i < NUM_MOUSE; i++){
-    virtio_mouse_queue_event_buf(&event_bufs[i]);
+    virtio_mouse_queue_event_buf(&mouse_event_bufs[i]);
   }
   virtio_mouse_notify_eventq(n);
 }
@@ -271,7 +270,7 @@ virtio_mouse_handle_syn_event(uint16 code, uint32 value)
     case SYN_REPORT:
       /*printf("report\n");*/
       send_cursor_update();
-      add_mouse_handler_event(MOUSE_SYN, xpos, ypos);
+      add_mouse_handler_event(ticks, MOUSE_SYN, xpos, ypos);
       break;
     case SYN_CONFIG:
       /*printf("config\n");*/
@@ -301,11 +300,11 @@ virtio_mouse_handle_key_event(uint16 code, uint32 value)
       if(value == 1){
         /*printf("[pressed]\n");*/
         left_click_press();
-        add_mouse_handler_event(MOUSE_LEFT_CLICK_PRESS, xpos, ypos);
+        add_mouse_handler_event(ticks, MOUSE_LEFT_CLICK_PRESS, xpos, ypos);
       } else if(value == 0) {
         /*printf("[released]\n");*/
         left_click_release();
-        add_mouse_handler_event(MOUSE_LEFT_CLICK_RELEASE, xpos, ypos);
+        add_mouse_handler_event(ticks, MOUSE_LEFT_CLICK_RELEASE, xpos, ypos);
       } else {
         /*printf("[value not recognized]\n");*/
       }
@@ -314,10 +313,10 @@ virtio_mouse_handle_key_event(uint16 code, uint32 value)
       /*printf("right click");*/
       if(value == 1){
         /*printf("[pressed]\n");*/
-        add_mouse_handler_event(MOUSE_RIGHT_CLICK_PRESS, xpos, ypos);
+        add_mouse_handler_event(ticks, MOUSE_RIGHT_CLICK_PRESS, xpos, ypos);
       } else if(value == 0) {
         /*printf("[released]\n");*/
-        add_mouse_handler_event(MOUSE_RIGHT_CLICK_RELEASE, xpos, ypos);
+        add_mouse_handler_event(ticks, MOUSE_RIGHT_CLICK_RELEASE, xpos, ypos);
       } else {
         /*printf("[value not recognized]\n");*/
       }
@@ -363,7 +362,7 @@ virtio_mouse_handle_rel_event(uint16 code, uint32 value)
     /*printf("%d\n", delta);*/
   /*}*/
   get_cursor_pos(&new_xpos, &new_ypos);
-  add_mouse_handler_event(MOUSE_REL, new_xpos - orig_xpos, new_ypos - orig_ypos);
+  add_mouse_handler_event(ticks, MOUSE_REL, new_xpos - orig_xpos, new_ypos - orig_ypos);
 }
 
 void
@@ -397,16 +396,16 @@ virtio_mouse_get_event_buf()
 }
 
 void 
-print_bufs()
+print_mouse_bufs()
 {
   printf("EVENT BUFS:\n");
   for(int i = 0; i < NUM_MOUSE; i++){
-    printf("  %d:, type=%p, code=%p, value=%p\n", i, event_bufs[i].type, event_bufs[i].code, event_bufs[i].value);
+    printf("  %d:, type=%p, code=%p, value=%p\n", i, mouse_event_bufs[i].type, mouse_event_bufs[i].code, mouse_event_bufs[i].value);
   }
 }
 
 void
-print_eventq()
+print_mouse_eventq()
 {
   printf("EVENTQ:\n");
   printf("  DESC:\n");
@@ -429,15 +428,15 @@ print_eventq()
 }
 
 void
-print_state()
+print_mouse_state()
 {
   printf("EVENTS: ");
   for(int i = 0; i < NUM_MOUSE; i++){
     printf("%p, ", mouse.events[i]);
   }
   printf("\n");
-  print_bufs();
-  print_eventq();
+  print_mouse_bufs();
+  print_mouse_eventq();
 }
 
 void

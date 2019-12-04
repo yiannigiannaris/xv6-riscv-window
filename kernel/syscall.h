@@ -29,6 +29,6 @@
 #define SYS_testgraphics 26
 #define SYS_mkwindow 27
 #define SYS_updatewindow 28
-#define SYS_startmousehandler 29
+#define SYS_startinputhandler 29
 #define SYS_sigalarm 30
 #define SYS_sigreturn 31

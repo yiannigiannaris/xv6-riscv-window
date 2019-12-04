@@ -30,7 +30,7 @@ int umount(char*);
 int testgraphics(void);
 uint64 mkwindow(int *fdp);
 int updatewindow(int fd, int width, int height);
-void startmousehandler(void);
+void startinputhandler(void);
 int sigalarm(int ticks, void(*handler)());
 int sigreturn(void);
 

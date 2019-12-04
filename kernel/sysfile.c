@@ -561,10 +561,10 @@ sys_updatewindow(void)
 }
 
 uint64
-sys_startmousehandler(void)
+sys_startinputhandler(void)
 {
   intr_off();
-  start_mouse_handler();
+  start_input_handler();
   intr_on();
   return 0;
 }

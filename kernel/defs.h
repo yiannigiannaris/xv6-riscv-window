@@ -195,10 +195,15 @@ void            virtio_disk_intr(int);
 void            virtio_mouse_init(int);
 void            virtio_mouse_recv_events(int);
 
-// mouse_handler.c
-void            init_mouse_handler(void);
-void            start_mouse_handler(void);
-void            add_mouse_handler_event(int, int, int); 
+// virtio_keyboard.c
+void            virtio_keyboard_init(int);
+void            virtio_keyboard_recv_events(int);
+
+// input_handler.c
+void            init_input_handler(void);
+void            start_input_handler(void);
+void            add_mouse_handler_event(uint, int, int, int); 
+void            add_keyboard_handler_event(uint, int, int); 
 
 // cursor.c
 void            init_cursor(void);
@@ -224,9 +229,12 @@ void            draw_wallpaper(void);
 void            init_windows(void);
 uint64          new_window(struct file*, struct file*);
 int             update_window(struct file*, int, int);
-void            handle_left_click_press(int, int);
-void            handle_left_click_release(int, int);
-void            handle_cursor_move(int, int);
+void            handle_left_click_press(uint, int, int);
+void            handle_left_click_release(uint, int, int);
+void            handle_right_click_press(uint, int, int);
+void            handle_right_click_release(uint, int, int);
+void            handle_cursor_move(uint, int, int);
+void            handle_keyboard(uint, int, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

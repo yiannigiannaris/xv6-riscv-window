@@ -52,6 +52,7 @@
 // must be a power of two.
 #define NUM 8
 #define NUM_MOUSE 64
+#define NUM_KEYBOARD 64
 
 struct VRingDesc {
   uint64 addr;

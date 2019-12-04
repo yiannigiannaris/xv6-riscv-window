@@ -200,6 +200,8 @@ devintr()
       virtio_gpu_intr(irq - VIRTIO1_IRQ); 
     } else if(irq == VIRTIO2_IRQ){
       virtio_mouse_recv_events(irq - VIRTIO2_IRQ);
+    } else if(irq == VIRTIO3_IRQ){
+      virtio_keyboard_recv_events(irq - VIRTIO3_IRQ);
     }
 
 

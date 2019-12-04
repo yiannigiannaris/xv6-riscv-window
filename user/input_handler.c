@@ -9,6 +9,6 @@
 int
 main(void)
 {
-  startmousehandler();
+  startinputhandler();
   exit(0);
 }

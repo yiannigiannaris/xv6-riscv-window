@@ -6,8 +6,25 @@
 #define MOUSE_RIGHT_CLICK_RELEASE 5
 
 
+#define DEV_MOUSE 0
+#define DEV_KEYBOARD 1
+
 struct mouse_event {
   int type;
   int xval;
   int yval;
+};
+
+struct keyboard_event {
+  int code;
+  int val;
+};
+
+struct input_event {
+  uint timestamp;
+  uint8 dev;
+  union {
+    struct mouse_event m_event;
+    struct keyboard_event k_event;
+  };
 };

@@ -32,7 +32,8 @@ OBJS = \
   $K/virtio_disk.o \
 	$K/virtio_mouse.o \
   $K/virtio_gpu.o \
-	$K/mouse_handler.o \
+	$K/virtio_keyboard.o \
+	$K/input_handler.o \
 	$K/display.o \
 	$K/cursor.o \
 	$K/windows.o \
@@ -55,8 +56,7 @@ TOOLPREFIX := $(shell if riscv64-unknown-elf-objdump -i 2>&1 | grep 'elf64-big' 
 	echo "***" 1>&2; exit 1; fi)
 endif
 
-QEMU = /Users/yiannigiannaris/Documents/School/6.828/qemu/riscv64-softmmu/qemu-system-riscv64
-
+QEMU = /Users/robertdelaus/Documents/6.828/project/qemu/riscv64-softmmu/qemu-system-riscv64 
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
 LD = $(TOOLPREFIX)ld
@@ -184,7 +184,7 @@ QEMUEXTRA = -drive file=fs1.img,if=none,format=raw,id=x1 -device virtio-blk-devi
 #QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -nographic 
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 256M -smp $(CPUS) -serial file:serial.out
 #QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -nographic
-QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -append console=ttyS0
+QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0, -device virtio-mouse-device,bus=virtio-mmio-bus.2, -device virtio-gpu-device,bus=virtio-mmio-bus.1, -device virtio-keyboard-device,bus=virtio-mmio-bus.3 -append console=ttyS0
 
 qemu: $K/kernel fs.img
 	$(QEMU) $(QEMUOPTS)

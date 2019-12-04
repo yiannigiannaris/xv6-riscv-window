@@ -26,6 +26,7 @@
 #define VIRTIO0_IRQ 1
 #define VIRTIO1_IRQ 2
 #define VIRTIO2_IRQ 3
+#define VIRTIO3_IRQ 4
 
 // local interrupt controller, which contains the timer.
 #define CLINT 0x2000000L

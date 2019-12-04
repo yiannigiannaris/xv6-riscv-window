@@ -16,6 +16,7 @@ plicinit(void)
   *(uint32*)(PLIC + VIRTIO0_IRQ*4) = 1;
   *(uint32*)(PLIC + VIRTIO1_IRQ*4) = 1;
   *(uint32*)(PLIC + VIRTIO2_IRQ*4) = 1;
+  *(uint32*)(PLIC + VIRTIO3_IRQ*4) = 1;
 }
 
 void
@@ -23,7 +24,7 @@ plicinithart(void)
 {
   int hart = cpuid();
   // set uart's enable bit for this hart's S-mode. 
-  *(uint32*)PLIC_SENABLE(hart)= (1 << UART0_IRQ) | (1 << VIRTIO0_IRQ) | (1 <<VIRTIO1_IRQ) | (1 <<VIRTIO2_IRQ);
+  *(uint32*)PLIC_SENABLE(hart)= (1 << UART0_IRQ) | (1 << VIRTIO0_IRQ) | (1 <<VIRTIO1_IRQ) | (1 <<VIRTIO2_IRQ) | (1 <<VIRTIO3_IRQ);
 
   // set this hart's S-mode priority threshold to 0.
   *(uint32*)PLIC_SPRIORITY(hart) = 0;

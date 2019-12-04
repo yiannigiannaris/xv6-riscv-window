@@ -43,6 +43,6 @@ entry("umount");
 entry("mkwindow");
 entry("updatewindow");
 entry("testgraphics");
-entry("startmousehandler");
+entry("startinputhandler");
 entry("sigalarm");
 entry("sigreturn");

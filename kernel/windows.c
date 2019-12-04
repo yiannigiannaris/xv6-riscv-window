@@ -12,10 +12,15 @@
 #include "window_event.h"
 #include "fs.h"
 #include "file.h"
+#include "events.h"
+#include "keyconv.h"
+
 
 struct spinlock windows_lock;
 struct window *head;
 struct window windows[MAX_WINDOWS];
+
+int shift_held;
 
 struct {
   int held;
@@ -41,6 +46,7 @@ init_windows()
     windows[i].frame_buf = (uint32*)window_frames;
     window_frames += FRAME_DATA_SIZE;
   }
+  shift_held = 0;
 }
 
 void
@@ -250,14 +256,14 @@ handle_left_click_press_header(struct window *win, int xpos, int ypos)
 }
 
 void
-handle_left_click_press_focused(struct window* win, int xpos, int ypos)
+handle_left_click_press_focused(uint timestamp, struct window* win, int xpos, int ypos)
 {
   if(is_pos_in_header(win, xpos, ypos)){
     handle_left_click_press_header(win, xpos, ypos);
   } else if(is_pos_in_window_frame(win, xpos, ypos)){
     int xrel = xpos - win->xpos;
     int yrel = ypos - win->ypos;
-    struct window_event event = {.type = W_LEFT_CLICK_PRESS, .xval = xrel, .yval = yrel};
+    struct window_event event = {.timestamp = timestamp, .kind = W_KIND_MOUSE, .m_event.type = W_LEFT_CLICK_PRESS, .m_event.xval = xrel, .m_event.yval = yrel};
     w_pipewrite(win->wf->w_pipe, (uint64)&event);
     win_held.held = 1;
     win_held.win = win;
@@ -266,7 +272,7 @@ handle_left_click_press_focused(struct window* win, int xpos, int ypos)
 
 
 void
-handle_left_click_press(int xpos, int ypos)
+handle_left_click_press(uint timestamp, int xpos, int ypos)
 {
   acquire(&windows_lock);
   struct window* win = head;
@@ -275,7 +281,7 @@ handle_left_click_press(int xpos, int ypos)
     return;
   }
   if(is_pos_in_window(win, xpos, ypos)){
-    handle_left_click_press_focused(win, xpos, ypos);
+    handle_left_click_press_focused(timestamp, win, xpos, ypos);
     release(&windows_lock);
     return;
   }
@@ -296,7 +302,7 @@ handle_left_click_press(int xpos, int ypos)
 }
 
 void
-handle_left_click_release(int xpos, int ypos)
+handle_left_click_release(uint timestamp, int xpos, int ypos)
 {
   acquire(&windows_lock);
   if(header_held.held){
@@ -310,7 +316,7 @@ handle_left_click_release(int xpos, int ypos)
   } else if(win_held.held){
     int xrelpos = xpos - win_held.win->xpos;
     int yrelpos = ypos - win_held.win->ypos;
-    struct window_event event = {.type = W_LEFT_CLICK_RELEASE, .xval = xrelpos, .yval = yrelpos};
+    struct window_event event = {.timestamp = timestamp, .kind = W_KIND_MOUSE, .m_event.type = W_LEFT_CLICK_RELEASE, .m_event.xval = xrelpos, .m_event.yval = yrelpos};
     w_pipewrite(win_held.win->wf->w_pipe, (uint64)&event);
     win_held.held = 0;
   }
@@ -318,7 +324,53 @@ handle_left_click_release(int xpos, int ypos)
 }
 
 void
-handle_cursor_move(int xpos, int ypos)
+handle_right_click_press_focused(uint timestamp, struct window* win, int xpos, int ypos)
+{
+  if(is_pos_in_window_frame(win, xpos, ypos)){
+    int xrel = xpos - win->xpos;
+    int yrel = ypos - win->ypos;
+    struct window_event event = {.timestamp = timestamp, .kind = W_KIND_MOUSE, .m_event.type = W_RIGHT_CLICK_PRESS, .m_event.xval = xrel, .m_event.yval = yrel};
+    w_pipewrite(win->wf->w_pipe, (uint64)&event);
+    win_held.held = 1;
+    win_held.win = win;
+  }
+}
+
+
+void
+handle_right_click_press(uint timestamp, int xpos, int ypos)
+{
+  acquire(&windows_lock);
+  struct window* win = head;
+  if(!win){
+    release(&windows_lock);
+    return;
+  }
+  if(is_pos_in_window(win, xpos, ypos)){
+    handle_right_click_press_focused(timestamp, win, xpos, ypos);
+    release(&windows_lock);
+    return;
+  }
+  release(&windows_lock);
+}
+
+void
+handle_right_click_release(uint timestamp, int xpos, int ypos)
+{
+  acquire(&windows_lock);
+  if(win_held.held){
+    int xrelpos = xpos - win_held.win->xpos;
+    int yrelpos = ypos - win_held.win->ypos;
+    struct window_event event = {.timestamp = timestamp, .kind = W_KIND_MOUSE, .m_event.type = W_RIGHT_CLICK_RELEASE, .m_event.xval = xrelpos, .m_event.yval = yrelpos};
+    w_pipewrite(win_held.win->wf->w_pipe, (uint64)&event);
+    win_held.held = 0;
+  }
+  release(&windows_lock);
+}
+
+
+void
+handle_cursor_move(uint timestamp, int xpos, int ypos)
 {
   acquire(&windows_lock);
   if(header_held.held){
@@ -334,13 +386,50 @@ handle_cursor_move(int xpos, int ypos)
     move_window_rel(header_held.win, xrelmove, yrelmove);
     display_windows();
   } else {
+    if(!head){
+      release(&windows_lock);
+      return;
+    }
     if(is_pos_in_window_frame(head, xpos, ypos)){
       int xrelpos = xpos - head->xpos;
       int yrelpos = ypos - head->ypos;
-      struct window_event event = {.type = W_CUR_MOVE_ABS, .xval = xrelpos, .yval = yrelpos};
+      struct window_event event = {.timestamp = timestamp, .kind = W_KIND_MOUSE, .m_event.type = W_CUR_MOVE_ABS, .m_event.xval = xrelpos, .m_event.yval = yrelpos};
       w_pipewrite(head->wf->w_pipe, (uint64)&event);
     }
   }
   release(&windows_lock);
 }
+
+void
+handle_keyboard(uint timestamp, int code, int val)
+{
+  acquire(&windows_lock);
+  if(!head){
+    release(&windows_lock);
+    return;
+  }
+  if(code == KEY_LEFTSHIFT || code == KEY_RIGHTSHIFT){
+    if(val)
+      shift_held = 1;
+    else
+      shift_held = 0;
+    release(&windows_lock);
+    return;
+  }  
+
+  if(!val){
+    release(&windows_lock);
+    return;
+  }
+
+  uint8 c;
+  if(shift_held)
+    c = upper_keys[code]; 
+  else
+    c = lower_keys[code];
+  struct window_event event = {.timestamp = timestamp, .kind = W_KIND_KEYBOARD, .k_event.ascii_val = c};
+  w_pipewrite(head->wf->w_pipe, (uint64)&event);
+  release(&windows_lock);
+}
+
 

@@ -40,7 +40,7 @@ main(void)
    }
    if(pid2 == 0){
      exec("input_handler", argv_hand);
-     printf("start mouse handler failed\n");
+     printf("start input handler failed\n");
      exit(1);
    }
  	 while((wpid=wait(0)) >= 0 && wpid != pid){
