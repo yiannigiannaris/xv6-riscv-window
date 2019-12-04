@@ -3,6 +3,7 @@
 #include "user/genfonts.h"
 #include "user/gui.h"
 #include "user/draw.h"
+#include "kernel/window_event.h"
 
 int break_loop_flag = 0;
 
@@ -97,15 +98,16 @@ switch_state(struct window* window, struct state* state)
 void
 add_elmt(struct state* state, struct elmt* elmt)
 {
-  state->elmt_count += 1;
   if(!state->elmt){
     state->elmt = elmt;
+    elmt->next = 0;
+    elmt->prev = elmt;
     return;
   }
   struct elmt* head_elmt = state->elmt;
   head_elmt->prev->next = elmt;
   elmt->prev = head_elmt->prev;
-  elmt->next = head_elmt;
+  elmt->next = 0;
   head_elmt->prev = elmt; 
   notify_change();
   return;
@@ -115,9 +117,9 @@ void
 remove_elmt(struct state* state, struct elmt* elmt)
 {
  elmt->prev->next = elmt->next;
- elmt->next->prev = elmt->prev; 
- state->elmt_count -= 1;
- if(!state->elmt_count)
+ if(elmt->next)
+   elmt->next->prev = elmt->prev; 
+ if(elmt->prev == elmt)
    state->elmt = 0;
  notify_change();
  return;
@@ -130,29 +132,70 @@ modify_elmt(void)
   return;
 }
 
+int
+intersect(struct window_event *event, struct elmt *elmt)
+{
+  return event->xval >= elmt->x && 
+         event->xval <= elmt->x + elmt->width && 
+         event->yval >= elmt->y && 
+         event->yval <= elmt->y + elmt->height;
+}
+
+void
+handle_event(struct window* window, struct window_event *event, struct elmt *elmt)
+{
+  switch (event->type){
+    case W_SYN:
+      break;
+    case W_CUR_MOVE_ABS:
+      break;
+    case W_LEFT_CLICK_PRESS:
+      if(intersect(event, elmt)){
+        elmt->l_depressed = 1;
+      }
+      break;
+    case W_LEFT_CLICK_RELEASE:
+      if(intersect(event, elmt) && elmt->l_depressed){
+        elmt->l_depressed = 0;
+        (*(elmt->mlc))();
+      }
+      break;
+    case W_RIGHT_CLICK_PRESS:
+      for(struct elmt* e = window->state->elmt; e != 0;e = e->next){
+        e->r_depressed = 0;
+      }
+      if(intersect(event, elmt)){
+        elmt->r_depressed = 1;
+      }
+      break;
+    case W_RIGHT_CLICK_RELEASE:
+      if(intersect(event, elmt) && elmt->r_depressed){
+        elmt->r_depressed = 0;
+        elmt->mrc();
+      }
+      break;
+  }    
+} 
+
 void
 loop(struct gui* gui, struct window* window){
-  /*(
-  int fd = 0;
-  struct event e;
-  for(read(fd,&e, sizeof(struct event))){
-     //read mouse event
-     //process mouse event
-     //check for     
-  */
-  struct state* state;
+  struct window_event event;
   while(1){
-    state = window->state;
-    struct elmt* e = state->elmt;
-    for(int i = 0; i < state->elmt_count; i++, e = e->next){
+    for(struct elmt* e = window->state->elmt; e != 0;e = e->next){
       draw(gui, window, e);
     }  
     updatewindow(window->fd, window->width, window->height);
     ack_change();
-    for (struct elmt* elmt = state->elmt;;elmt = elmt->next){
-      if(check_change())
-        break; 
-    } 
+    while(read(window->fd, &event, sizeof(struct window_event) > 0)){
+      for(struct elmt* e = window->state->elmt; e != 0;e = e->next){
+        handle_event(window, &event, e);
+        if(check_change())
+          break; 
+      } 
+      if(check_change()){
+        break;
+      }
+    }
   }
 }
 
@@ -184,7 +227,6 @@ new_state()
 {
   struct state* state = (struct state*)malloc(sizeof(struct state));
   state->elmt = 0;
-  state->elmt_count = 0;
   return state;
 }
 
