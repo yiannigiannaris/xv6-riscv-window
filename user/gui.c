@@ -4,6 +4,7 @@
 #include "user/gui.h"
 #include "user/draw.h"
 #include "kernel/window_event.h"
+#include "user/handlers.h"
 
 int break_loop_flag = 0;
 
@@ -157,7 +158,7 @@ handle_event(struct window* window, struct window_event *event, struct elmt *elm
     case W_LEFT_CLICK_RELEASE:
       if(intersect(event, elmt) && elmt->l_depressed){
         elmt->l_depressed = 0;
-        (*(elmt->mlc))();
+        (elmt->mlc)();
       }
       break;
     case W_RIGHT_CLICK_PRESS:
@@ -189,8 +190,9 @@ loop(struct gui* gui, struct window* window){
     while(read(window->fd, &event, sizeof(struct window_event) > 0)){
       for(struct elmt* e = window->state->elmt; e != 0;e = e->next){
         handle_event(window, &event, e);
-        if(check_change())
+        if(check_change()){
           break; 
+        }
       } 
       if(check_change()){
         break;
@@ -256,7 +258,6 @@ new_window(struct gui* gui, int width, int height)
   win->width = width;
   win->height = height;
   win->state = 0;
-  gui->window = win;
   return win;
 }
 

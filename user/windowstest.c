@@ -8,6 +8,14 @@
 #include "kernel/colors.h"
 #include "user/gui.h"
 #include "user/uthread.h"
+#include "user/handlers.h"
+
+typedef signed long int64;
+
+struct c_float{
+  int64 val;
+  int64 decimal;
+};
 
 char nums[10] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
@@ -22,7 +30,6 @@ void reverse(char* str, int len)
         i++; 
         j--; 
     } 
-  printf("end reverse\n");
 } 
 
 int pow(int x, int y)  {  
@@ -41,12 +48,6 @@ int pow(int x, int y)  {
     }  
 } 
 
-typedef signed long int64;
-
-struct c_float{
-  int64 val;
-  int64 decimal;
-};
 
 
 struct c_float
@@ -127,7 +128,6 @@ div(struct c_float a, struct c_float b)
 void
 print_float(struct c_float f, char* num)
 {
-  printf("start print float\n");
   char *c = num;
   int i; 
   int neg = f.val < 0;
@@ -158,10 +158,7 @@ print_float(struct c_float f, char* num)
   }
   c++;
   *c = '\0'; 
-  printf("HERE print float\n");
-  printf("reverse function %p\n", &reverse);
   reverse(num, strlen(num));
-  printf("end print float\n");
   return;
 }
 
@@ -222,30 +219,24 @@ void
 write_scratch()
 {
   print_float(scratch, textbox_text);
-  printf("start write\n");
   textbox->text = textbox_text;
   textbox->textlength = strlen(textbox_text);
   modify_elmt();
-  printf("end write\n");
 }
 
 void
 process_value(int i)
 {
-  printf("process value\n");
   scratch.val = scratch.val * 10 + i;
   if(decimal){  
     scratch.decimal += 1;
   }
-  printf("got here\n");
   write_scratch();
-  printf("finished process value\n");
 }
 
 void
 process_op(enum ops operation)
 {
-  printf("processed op\n");
   if(op == NONE){
     op = operation;
     value = scratch;
@@ -254,7 +245,7 @@ process_op(enum ops operation)
 
 void handle_0(void)
 {
-  process_value(0);
+ process_value(0);
 }
 
 void handle_1(void)
@@ -326,33 +317,29 @@ void handle_mod(void)
 {
 }
 
-void handle_div(void)
-{
-  printf("hande div\n");
-  process_op(DIV);
-}
 
 void handle_multi(void)
 {
-  printf("hande multi\n");
   process_op(MULT);
 }
-
 void handle_sub(void)
 {
-  printf("hande sub\n");
   process_op(SUB);
 }
 
 void handle_add(void)
 {
-  printf("hande add\n");
   process_op(ADD);
+}
+
+void handle_div(void)
+{
+  process_op(DIV);
+  return;
 }
 
 void handle_eq(void)
 {
-  printf("hande eq\n");
   process_op(EQ);
 }
 
@@ -484,33 +471,32 @@ make_buttons(struct state* state)
   add_elmt(state, textbox);
 }
 
-/*
 void
 test_float()
 {
   struct c_float a = {.val = 51408248, .decimal = 5};
   struct c_float b = {.val = 617, .decimal = 0};
-  printf("hit\n");
   struct c_float c = div(a , b); 
-  printf("after add\n");
   char num[100];
   print_float(c, num);
   printf("c: %s\n", num);
 }
-*/
 
 
 
 int
 main(void)
 {
-//  test_float();
+  test_float();
+  char *c = "hello";
   struct gui* gui = init_gui();
   struct window* window1 = new_window(gui, 500, 500);  
   struct state* state1 = new_state();
   add_state(window1, state1);
   add_window(gui, window1);
+  reverse(c, strlen(c));
   make_buttons(state1);
+  handle_div();
   loop(gui, window1);
   exit(0);
 }
