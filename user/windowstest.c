@@ -22,6 +22,7 @@ void reverse(char* str, int len)
         i++; 
         j--; 
     } 
+  printf("end reverse\n");
 } 
 
 int pow(int x, int y)  {  
@@ -126,6 +127,7 @@ div(struct c_float a, struct c_float b)
 void
 print_float(struct c_float f, char* num)
 {
+  printf("start print float\n");
   char *c = num;
   int i; 
   int neg = f.val < 0;
@@ -156,7 +158,10 @@ print_float(struct c_float f, char* num)
   }
   c++;
   *c = '\0'; 
+  printf("HERE print float\n");
+  printf("reverse function %p\n", &reverse);
   reverse(num, strlen(num));
+  printf("end print float\n");
   return;
 }
 
@@ -217,29 +222,34 @@ void
 write_scratch()
 {
   print_float(scratch, textbox_text);
+  printf("start write\n");
   textbox->text = textbox_text;
   textbox->textlength = strlen(textbox_text);
   modify_elmt();
+  printf("end write\n");
 }
 
 void
 process_value(int i)
 {
+  printf("process value\n");
   scratch.val = scratch.val * 10 + i;
   if(decimal){  
     scratch.decimal += 1;
   }
+  printf("got here\n");
   write_scratch();
+  printf("finished process value\n");
 }
 
 void
 process_op(enum ops operation)
 {
+  printf("processed op\n");
   if(op == NONE){
     op = operation;
     value = scratch;
   }
-  printf("processed op\n");
 }
 
 void handle_0(void)
@@ -318,27 +328,32 @@ void handle_mod(void)
 
 void handle_div(void)
 {
-  //process_op(DIV);
+  printf("hande div\n");
+  process_op(DIV);
 }
 
 void handle_multi(void)
 {
-  //process_op(MULT);
+  printf("hande multi\n");
+  process_op(MULT);
 }
 
 void handle_sub(void)
 {
-  //process_op(SUB);
+  printf("hande sub\n");
+  process_op(SUB);
 }
 
 void handle_add(void)
 {
-  //process_op(ADD);
+  printf("hande add\n");
+  process_op(ADD);
 }
 
 void handle_eq(void)
 {
-  //process_op(EQ);
+  printf("hande eq\n");
+  process_op(EQ);
 }
 
 
@@ -469,6 +484,7 @@ make_buttons(struct state* state)
   add_elmt(state, textbox);
 }
 
+/*
 void
 test_float()
 {
@@ -481,13 +497,14 @@ test_float()
   print_float(c, num);
   printf("c: %s\n", num);
 }
+*/
 
 
 
 int
 main(void)
 {
-  test_float();
+//  test_float();
   struct gui* gui = init_gui();
   struct window* window1 = new_window(gui, 500, 500);  
   struct state* state1 = new_state();
