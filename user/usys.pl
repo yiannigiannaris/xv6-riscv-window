@@ -42,6 +42,7 @@ entry("mount");
 entry("umount");
 entry("mkwindow");
 entry("updatewindow");
+entry("closewindow");
 entry("testgraphics");
 entry("startinputhandler");
 entry("sigalarm");

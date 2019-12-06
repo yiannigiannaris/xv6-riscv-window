@@ -130,8 +130,9 @@ handle_keyboard_event(uint timestamp, int code, int val)
 void
 start_input_handler()
 {
+  printf("starting input handler\n");
   if(running)
-    panic("mouse handler already running\n");
+    panic("input handler already running\n");
   running = 1;
   int idx;
   int type, xval, yval, code, val;

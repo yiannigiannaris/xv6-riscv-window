@@ -16,6 +16,7 @@
 #include "file.h"
 #include "fcntl.h"
 #include "memlayout.h"
+#include "windows.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -528,26 +529,26 @@ sys_mkwindow(void)
     fileclose(wf);
     return -1;
   }
-  uint64 frame_buf;
-  if((frame_buf = new_window(rf, wf)) == 0){
+  struct window *win;
+  if((win = new_window(rf, wf)) == 0){
     kfree((char*)rf->w_pipe);
     p->ofile[rfd] = 0;
     fileclose(rf);
     fileclose(wf);
     return -1;
   }
-  int flags = PTE_U | PTE_R | PTE_W;
-  if(mappages(p->pagetable, p->sz, FRAME_DATA_SIZE, frame_buf, flags) < 0){
+  p->sz = PGROUNDUP(p->sz);
+  if(mappages(p->pagetable, p->sz, FRAME_DATA_SIZE, (uint64)win->frame_buf, PTE_W|PTE_R|PTE_U) < 0){
     kfree((char*)rf->w_pipe);
     p->ofile[rfd] = 0;
     fileclose(rf);
     fileclose(wf);
     return -1;
   }
-  uint64 ret = p->sz;
+  win->fbva = p->sz;
   p->sz += FRAME_DATA_SIZE;
   p->nwindows++;
-  return ret;
+  return win->fbva;
 }
 
 uint64
@@ -558,6 +559,17 @@ sys_updatewindow(void)
   if(argfd(0, &rfd, &rf) < 0 || argint(1, &width) < 0 || argint(2, &height) < 0)
     return -1;
   return update_window(rf, width, height);
+}
+
+uint64
+sys_closewindow(void)
+{
+  int rfd;
+  struct file *rf;
+  if(argfd(0, &rfd, &rf) < 0)
+    return -1;
+  user_close_window(rf);
+  return 0;
 }
 
 uint64

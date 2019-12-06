@@ -109,3 +109,6 @@ struct proc {
   int tickcount;
   struct trapframe *stf;
 };
+
+extern struct proc proc[NPROC];
+

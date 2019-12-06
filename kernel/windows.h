@@ -4,6 +4,7 @@ struct window {
   int xpos;
   int ypos;
   uint32 *frame_buf;
+  uint64 fbva;
   struct spinlock lock;
   struct file *rf;
   struct file *wf;

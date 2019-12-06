@@ -118,19 +118,17 @@ display_windows()
 {
   draw_wallpaper();
   struct window *win = head;
-  if(!win)
-    return;
-
-  win = win->prev;
-  do {
-    display_window(win);
+  if(win){
     win = win->prev;
-  } while(win != head->prev);
-
+    do {
+      display_window(win);
+      win = win->prev;
+    } while(win != head->prev);
+  }
   send_frame_update();
 }
 
-uint64
+struct window*
 new_window(struct file *rf, struct file *wf)
 {
   acquire(&windows_lock);
@@ -161,7 +159,55 @@ new_window(struct file *rf, struct file *wf)
     head->prev = win;
   }
   release(&windows_lock);
-  return (uint64)win->frame_buf;
+  return win;
+}
+
+
+void
+close_window(struct window* win)
+{
+  struct proc *p;
+  int fd, has_window;
+  uint64 va, pa;
+  for(p = proc; p < &proc[NPROC]; p++) {
+    has_window = 0;
+    for(fd = 0; fd < NOFILE; fd++){
+      if(p->ofile[fd] == win->rf){
+        p->ofile[fd] = 0;
+        has_window = 1;
+        break;
+      }
+    }
+
+    if(has_window){
+      uvmunmap(p->pagetable, win->fbva, FRAME_DATA_SIZE, 0);
+      va = win->fbva;
+      for(int n = 0; n < FRAME_DATA_SIZE / PGSIZE; n++){
+        if((pa = (uint64)kalloc()) == 0)
+          panic("close_window: kalloc");
+        if(mappages(p->pagetable, va, PGSIZE, pa, PTE_W|PTE_R|PTE_U) < 0)
+          panic("close_window: mappages");
+        va += PGSIZE;
+      }
+      p->nwindows--;
+      if(p->nwindows < 1){
+        kill(p->pid);
+      }
+    }
+  }
+
+  if(win->next == win){
+    head = 0;
+  } else {
+    win->next->prev = win->prev;
+    win->prev->next = win->next;
+    if(win == head)
+      head = win->next;
+  }
+  fileclose(win->rf);
+  fileclose(win->wf);
+  win->free = 1;
+  display_windows();
 }
 
 // windows_lock should be held when calling find_window
@@ -180,6 +226,14 @@ find_window(struct file *rf)
 
   return (struct window*)0;
 }
+
+void
+user_close_window(struct file *rf)
+{
+  struct window *win = find_window(rf);
+  close_window(win);
+}
+
 
 // windows_lock should be held when calling focus_window
 void
@@ -245,6 +299,21 @@ is_pos_in_header(struct window* win, int xpos, int ypos)
   return 0;
 }
 
+int
+is_pos_in_close_box(struct window *win, int xpos, int ypos)
+{
+  if(!is_pos_in_header(win, xpos, ypos))
+    return 0;
+  int oxpos, oypos, owidth, oheight;
+  get_window_outer_dims(win, &oxpos, &oypos, &owidth, &oheight);
+  int bxpos = oxpos + W_BORDER_SIZE+2;
+  int bypos = oypos + W_BORDER_SIZE+2;
+  int button_size =  W_HEADER_SIZE - 2 * W_BORDER_SIZE;
+  if(xpos >= bxpos && xpos < bxpos + button_size && ypos >= bypos && ypos < bypos + button_size)
+    return 1;
+  return 0;
+}
+
 void
 handle_left_click_press_header(struct window *win, int xpos, int ypos)
 {
@@ -258,7 +327,9 @@ handle_left_click_press_header(struct window *win, int xpos, int ypos)
 void
 handle_left_click_press_focused(uint timestamp, struct window* win, int xpos, int ypos)
 {
-  if(is_pos_in_header(win, xpos, ypos)){
+  if(is_pos_in_close_box(win, xpos, ypos)){
+    close_window(win);
+  } else if(is_pos_in_header(win, xpos, ypos)){
     handle_left_click_press_header(win, xpos, ypos);
   } else if(is_pos_in_window_frame(win, xpos, ypos)){
     int xrel = xpos - win->xpos;
