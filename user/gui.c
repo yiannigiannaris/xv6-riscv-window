@@ -135,16 +135,16 @@ modify_elmt(void)
 int
 intersect(struct window_event *event, struct elmt *elmt)
 {
-  return event->xval >= elmt->x && 
-         event->xval <= elmt->x + elmt->width && 
-         event->yval >= elmt->y && 
-         event->yval <= elmt->y + elmt->height;
+  return event->m_event.xval >= elmt->x && 
+         event->m_event.xval <= elmt->x + elmt->width && 
+         event->m_event.yval >= elmt->y && 
+         event->m_event.yval <= elmt->y + elmt->height;
 }
 
 void
-handle_event(struct window* window, struct window_event *event, struct elmt *elmt)
+handle_mouse_event(struct window* window, struct window_event *event, struct elmt *elmt)
 {
-  switch (event->type){
+  switch (event->m_event.type){
     case W_SYN:
       break;
     case W_CUR_MOVE_ABS:
@@ -176,6 +176,23 @@ handle_event(struct window* window, struct window_event *event, struct elmt *elm
       break;
   }    
 } 
+
+void
+handle_keyboard_event(struct window* window, struct window_event *event, struct elmt *elmt)
+{
+
+}
+
+void
+handle_event(struct window* window, struct window_event *event, struct elmt *elmt){
+  if(event->kind == W_KIND_MOUSE){
+    handle_mouse_event(window, event, elmt);
+  } else if(event->kind == W_KIND_KEYBOARD){
+    handle_keyboard_event(window, event, elmt);
+  } else{
+    printf("gui: window event kind not recognized\n");
+  }
+}
 
 void
 loop(struct gui* gui, struct window* window){

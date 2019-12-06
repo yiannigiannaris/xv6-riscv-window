@@ -154,6 +154,7 @@ UPROGS=\
 	$U/_graphicstest\
 	$U/_windowstest\
 	$U/_input_handler\
+	$U/_calc\
 	$U/_alarmtest\
   #$U/_graphicstest\
 

@@ -7,11 +7,12 @@
 
 char *argv_win[] = { "windowstest", 0 };
 char *argv_hand[] = {"input_handler", 0};
+char *argv_calc[] = {"calc", 0};
 
 int
 main(void)
 {
-  int pid1, pid2;
+  int pid1, pid2, pid3;
 
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
@@ -38,8 +39,21 @@ main(void)
     exit(1);
   }
   if(pid2 == 0){
+    sleep(5);
     printf("init: starting windows test\n");
     exec("windowstest", argv_win);
+    exit(0);
+  }
+
+  pid3 = fork();
+  if(pid3 < 0){
+    printf("init: fork 3 failed\n");
+    exit(1);
+  }
+  if(pid3 == 0){
+    sleep(10);
+    printf("init: starting calc\n");
+    exec("calc", argv_calc);
     exit(0);
   }
 
