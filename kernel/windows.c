@@ -168,7 +168,6 @@ close_window(struct window* win)
 {
   struct proc *p;
   int fd, has_window;
-  uint64 va, pa;
   for(p = proc; p < &proc[NPROC]; p++) {
     has_window = 0;
     for(fd = 0; fd < NOFILE; fd++){
@@ -181,14 +180,6 @@ close_window(struct window* win)
 
     if(has_window){
       uvmunmap(p->pagetable, win->fbva, FRAME_DATA_SIZE, 0);
-      va = win->fbva;
-      for(int n = 0; n < FRAME_DATA_SIZE / PGSIZE; n++){
-        if((pa = (uint64)kalloc()) == 0)
-          panic("close_window: kalloc");
-        if(mappages(p->pagetable, va, PGSIZE, pa, PTE_W|PTE_R|PTE_U) < 0)
-          panic("close_window: mappages");
-        va += PGSIZE;
-      }
       p->nwindows--;
       if(p->nwindows < 1){
         kill(p->pid);

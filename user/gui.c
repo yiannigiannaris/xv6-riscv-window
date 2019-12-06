@@ -273,7 +273,6 @@ new_window(struct gui* gui, int width, int height)
   win->width = width;
   win->height = height;
   win->state = 0;
-  gui->window = win;
   return win;
 }
 
