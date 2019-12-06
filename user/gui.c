@@ -4,7 +4,6 @@
 #include "user/gui.h"
 #include "user/draw.h"
 #include "kernel/window_event.h"
-#include "user/handlers.h"
 
 int break_loop_flag = 0;
 

@@ -8,7 +8,6 @@
 #include "kernel/colors.h"
 #include "user/gui.h"
 #include "user/uthread.h"
-#include "user/handlers.h"
 
 typedef signed long int64;
 
