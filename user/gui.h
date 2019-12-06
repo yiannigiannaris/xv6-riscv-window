@@ -2,7 +2,7 @@
 #define MAX_ELMTS 100
 #define MAX_STATES 10
 
-typedef int (*event_handler)(void);
+typedef void (*event_handler)(void);
 
 enum elmt_type {
   BUTTON,
@@ -32,11 +32,12 @@ struct elmt{
   uint8 text_alpha;
   struct elmt *next;
   struct elmt *prev;
+  int l_depressed;
+  int r_depressed;
 };
 
 struct state{
   struct elmt *elmt;
-  int elmt_count;
   struct state *next;
   struct state *prev;
 };
