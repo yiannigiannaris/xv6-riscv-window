@@ -55,7 +55,7 @@ TOOLPREFIX := $(shell if riscv64-unknown-elf-objdump -i 2>&1 | grep 'elf64-big' 
 	echo "***" 1>&2; exit 1; fi)
 endif
 
-QEMU = /Users/yiannigiannaris/Documents/School/6.828/qemu/riscv64-softmmu/qemu-system-riscv64
+QEMU = /Users/robertdelaus/Documents/6.828/project/qemu/riscv64-softmmu/qemu-system-riscv64
 
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
