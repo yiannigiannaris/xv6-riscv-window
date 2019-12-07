@@ -572,6 +572,54 @@ sys_closewindow(void)
   return 0;
 }
 
+
+uint64
+sys_mkapplauncher(void)
+{
+  struct proc *p = myproc();
+  struct file *rf;
+  struct file *wf;
+  uint64 rfdp;
+  if(argaddr(0, &rfdp) < 0)
+    return -1;
+  if(w_pipealloc(&rf, &wf) < 0)
+    return -1;
+  int rfd;
+  if((rfd = fdalloc(rf)) < 0){
+    kfree((char*)rf->w_pipe);
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  if(copyout(p->pagetable, rfdp, (char*)&rfd, sizeof(rfd)) < 0){
+    kfree((char*)rf->w_pipe);
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  struct window *win;
+  if((win = make_applauncher(rf, wf)) == 0){
+    kfree((char*)rf->w_pipe);
+    p->ofile[rfd] = 0;
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  p->sz = PGROUNDUP(p->sz);
+  if(mappages(p->pagetable, p->sz, FRAME_DATA_SIZE, (uint64)win->frame_buf, PTE_W|PTE_R|PTE_U) < 0){
+    kfree((char*)rf->w_pipe);
+    p->ofile[rfd] = 0;
+    fileclose(rf);
+    fileclose(wf);
+    return -1;
+  }
+  win->fbva = p->sz;
+  p->sz += FRAME_DATA_SIZE;
+  p->nwindows++;
+  return win->fbva;
+}
+
+
 uint64
 sys_startinputhandler(void)
 {

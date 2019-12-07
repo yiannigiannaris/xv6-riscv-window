@@ -317,7 +317,7 @@ attach_frame_buffer(int q, uint64 fb, int frame_width, int frame_height, int res
   };
   struct virtio_gpu_mem_entry request2 =
   {
-    .addr = (uint64)kvmpa((uint64)fb),
+    .addr = (uint64)fb,
     .length = frame_width*frame_height*4,
     .padding = 0,
   };

@@ -24,3 +24,5 @@
 #define W_HEADER_SIZE 30
 #define MAX_WINDOWS 10
 
+#define TASKBAR_SIZE 40
+

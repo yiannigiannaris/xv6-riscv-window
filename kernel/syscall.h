@@ -30,6 +30,7 @@
 #define SYS_mkwindow 27
 #define SYS_updatewindow 28
 #define SYS_closewindow 29
-#define SYS_startinputhandler 30
-#define SYS_sigalarm 31
-#define SYS_sigreturn 32
+#define SYS_mkapplauncher 30
+#define SYS_startinputhandler 31
+#define SYS_sigalarm 32
+#define SYS_sigreturn 33

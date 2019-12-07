@@ -21,6 +21,7 @@ void draw_window(int xpos, int ypos, int width, int height);
 void
 draw_wallpaper()
 {
+  /*printf("%p\n", wallpaper_frame);*/
   memmove(dframe.frame_buf, wallpaper_frame, FRAME_WIDTH*FRAME_HEIGHT*4);
 }
 
@@ -53,7 +54,7 @@ void
 set_pixel(int x, int y, uint32 color, uint32 alpha)
 {
   uint32 rgba = (color << 8) | alpha;
-  if((y >= 0 && y < FRAME_HEIGHT) && (x >= 0 && x ))
+  if((y >= 0 && y < FRAME_HEIGHT) && (x >= 0 && x < FRAME_WIDTH))
     *(dframe.frame_buf + y * FRAME_WIDTH + x) = rgba;
 }
 

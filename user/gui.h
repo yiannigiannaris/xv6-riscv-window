@@ -2,7 +2,7 @@
 #define MAX_ELMTS 100
 #define MAX_STATES 10
 
-typedef void (*event_handler)(void);
+typedef void (*event_handler)(int);
 
 enum elmt_type {
   BUTTON,
@@ -14,7 +14,7 @@ struct elmt{
   enum elmt_type type;
   event_handler mlc;
   event_handler mrc; 
-  uint uid;
+  uint id;
   uint width;
   uint height;
   uint x;
@@ -59,6 +59,7 @@ struct gui{
 
 struct gui* init_gui(void);
 struct window* new_window(struct gui*, int, int);
+struct window* new_applauncher(struct gui*, int, int);
 void add_window(struct gui*, struct window*);
 struct state* new_state();
 void add_state(struct window*, struct state*);

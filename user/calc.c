@@ -242,64 +242,64 @@ process_op(enum ops operation)
   }
 }
 
-void handle_0(void)
+void handle_0(int id)
 {
  process_value(0);
 }
 
-void handle_1(void)
+void handle_1(int id)
 {
   process_value(1);
 }
 
-void handle_2(void)
+void handle_2(int id)
 {
   process_value(2);
 }
 
-void handle_3(void)
+void handle_3(int id)
 {
   process_value(3);
 }
 
-void handle_4(void)
+void handle_4(int id)
 {
   process_value(4);
 }
 
-void handle_5(void)
+void handle_5(int id)
 {
   process_value(5);
 }
 
-void handle_6(void)
+void handle_6(int id)
 {
   process_value(6);
 }
 
-void handle_7(void)
+void handle_7(int id)
 {
   process_value(7);
 }
 
-void handle_8(void)
+void handle_8(int id)
 {
   process_value(8);
 }
 
-void handle_9(void)
+void handle_9(int id)
 {
   process_value(9);
 }
 
-void handle_decimal(void)
+void handle_decimal(int id)
 {
   decimal = 1;
   scratch.decimal = decimal;
   write_scratch(); 
 }
 
-void handle_clear(void)
+void handle_clear(int id)
 {
   decimal = 0;
   scratch.decimal = 0;
@@ -308,36 +308,36 @@ void handle_clear(void)
   op = NONE;
 }
 
-void handle_neg_tog(void)
+void handle_neg_tog(int id)
 {
 }
 
-void handle_mod(void)
+void handle_mod(int id)
 {
 }
 
 
-void handle_multi(void)
+void handle_multi(int id)
 {
   process_op(MULT);
 }
-void handle_sub(void)
+void handle_sub(int id)
 {
   process_op(SUB);
 }
 
-void handle_add(void)
+void handle_add(int id)
 {
   process_op(ADD);
 }
 
-void handle_div(void)
+void handle_div(int id)
 {
   process_op(DIV);
   return;
 }
 
-void handle_eq(void)
+void handle_eq(int id)
 {
   process_op(EQ);
 }
@@ -495,7 +495,6 @@ main(void)
   add_window(gui, window1);
   reverse(c, strlen(c));
   make_buttons(state1);
-  handle_div();
   loop(gui, window1);
   exit(0);
 }

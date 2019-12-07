@@ -129,6 +129,8 @@ main(int argc, char *argv[])
   iappend(rootino, &de, sizeof(de));
 
   for(i = 2; i < argc; i++){
+    if(strcmp(argv[i], "-apps") == 0)
+      break;
     // get rid of "user/"
     char *shortname;
     if(strncmp(argv[i], "user/", 5) == 0)
@@ -156,6 +158,49 @@ main(int argc, char *argv[])
     de.inum = xshort(inum);
     strncpy(de.name, shortname, DIRSIZ);
     iappend(rootino, &de, sizeof(de));
+
+    while((cc = read(fd, buf, sizeof(buf))) > 0)
+      iappend(inum, buf, cc);
+
+    close(fd);
+  }
+  i++;
+  char* appdirname = "applications";
+  uint appsino = ialloc(T_DIR);
+  bzero(&de, sizeof(de));
+  de.inum = xshort(appsino);
+  strncpy(de.name, appdirname, DIRSIZ);
+  iappend(rootino, &de, sizeof(de));
+  uint appino;
+  for(; i < argc; i+=2){
+    appino = ialloc(T_DIR);
+    bzero(&de, sizeof(de));
+    de.inum = xshort(appino);
+    strncpy(de.name, argv[i], DIRSIZ);
+    iappend(appsino, &de, sizeof(de));
+ 
+    char *shortname;
+    if(strncmp(argv[i+1], "user/", 5) == 0)
+      shortname = argv[i+1] + 5;
+    else
+      shortname = argv[i+1];
+    
+    assert(index(shortname, '/') == 0);
+
+    if((fd = open(argv[i+1], 0)) < 0){
+      perror(argv[i+1]);
+      exit(1);
+    }
+
+    if(shortname[0] == '_')
+      shortname += 1;
+
+    inum = ialloc(T_FILE);
+
+    bzero(&de, sizeof(de));
+    de.inum = xshort(inum);
+    strncpy(de.name, shortname, DIRSIZ);
+    iappend(appino, &de, sizeof(de));
 
     while((cc = read(fd, buf, sizeof(buf))) > 0)
       iappend(inum, buf, cc);

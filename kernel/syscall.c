@@ -110,6 +110,7 @@ extern uint64 sys_testgraphics(void);
 extern uint64 sys_mkwindow(void);
 extern uint64 sys_updatewindow(void);
 extern uint64 sys_closewindow(void);
+extern uint64 sys_mkapplauncher(void);
 extern uint64 sys_startinputhandler(void);
 extern uint64 sys_sigalarm(void);
 extern uint64 sys_sigreturn(void);
@@ -142,6 +143,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkwindow] sys_mkwindow,
 [SYS_updatewindow] sys_updatewindow,
 [SYS_closewindow] sys_closewindow,
+[SYS_mkapplauncher] sys_mkapplauncher,
 [SYS_startinputhandler] sys_startinputhandler,
 [SYS_sigalarm] sys_sigalarm,
 [SYS_sigreturn] sys_sigreturn,

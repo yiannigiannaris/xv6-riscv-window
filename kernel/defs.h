@@ -230,6 +230,7 @@ void            init_windows(void);
 struct window*  new_window(struct file*, struct file*);
 int             update_window(struct file*, int, int);
 void            user_close_window(struct file*);
+struct window*  make_applauncher(struct file*, struct file*);
 void            handle_left_click_press(uint, int, int);
 void            handle_left_click_release(uint, int, int);
 void            handle_right_click_press(uint, int, int);

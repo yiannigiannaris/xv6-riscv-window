@@ -152,14 +152,17 @@ UPROGS=\
 	$U/_crashtest\
 	$U/_alloctest\
 	$U/_graphicstest\
-	$U/_windowstest\
 	$U/_input_handler\
-	$U/_calc\
+	$U/_applauncher\
 	$U/_alarmtest\
   #$U/_graphicstest\
 
-fs.img: mkfs/mkfs README user/xargstest.sh cursorbytes user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS)
-	mkfs/mkfs fs.img README user/xargstest.sh cursorbytes user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS)
+UAPPS=\
+	$U/_windowstest\
+	$U/_calc\
+
+fs.img: mkfs/mkfs README user/xargstest.sh $(UPROGS) $(UAPPS)
+	mkfs/mkfs fs.img README user/xargstest.sh user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS) -apps wintest $U/_windowstest calculator $U/_calc
 
 -include kernel/*.d user/*.d
 

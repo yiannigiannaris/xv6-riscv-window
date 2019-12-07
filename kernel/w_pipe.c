@@ -9,7 +9,7 @@
 #include "file.h"
 #include "window_event.h"
 
-#define PIPESIZE (2*PGSIZE)
+#define PIPESIZE 202
 
 struct w_pipe {
   struct spinlock lock;

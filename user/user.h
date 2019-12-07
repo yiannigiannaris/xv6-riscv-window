@@ -29,6 +29,7 @@ int mount(char*, char *);
 int umount(char*);
 int testgraphics(void);
 uint64 mkwindow(int *fdp);
+uint64 mkapplauncher(int *fdp);
 int updatewindow(int fd, int width, int height);
 int closewindow(int fd);
 void startinputhandler(void);

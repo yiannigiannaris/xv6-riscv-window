@@ -5,6 +5,8 @@
 #include "user/draw.h"
 #include "kernel/window_event.h"
 
+int fontsizes[5] = FONTSIZES;
+
 int break_loop_flag = 0;
 
 void notify_change()
@@ -46,7 +48,7 @@ draw_elmt(struct gui* gui, struct window* window, struct elmt* elmt)
         text_x = elmt->x + elmt->width +elmt->border - totallength;
         break;
     }
-    text_y = (elmt->y + (elmt->y + elmt->height + (2*elmt->border)))/2 - elmt->fontsize/2;
+    text_y = (elmt->y + (elmt->y + elmt->height + (2*elmt->border)))/2 - fontsizes[elmt->fontsize]/2;
     draw_font(window->frame_buffer, window->width, window->height, text_x, text_y, gui->fonts, elmt->text, elmt->fontsize, elmt->textlength, elmt->text_fill, elmt->text_alpha);
   } 
 }
@@ -157,7 +159,7 @@ handle_mouse_event(struct window* window, struct window_event *event, struct elm
     case W_LEFT_CLICK_RELEASE:
       if(intersect(event, elmt) && elmt->l_depressed){
         elmt->l_depressed = 0;
-        (*(elmt->mlc))();
+        (*(elmt->mlc))(elmt->id);
       }
       break;
     case W_RIGHT_CLICK_PRESS:
@@ -171,7 +173,7 @@ handle_mouse_event(struct window* window, struct window_event *event, struct elm
     case W_RIGHT_CLICK_RELEASE:
       if(intersect(event, elmt) && elmt->r_depressed){
         elmt->r_depressed = 0;
-        elmt->mrc();
+        elmt->mrc(elmt->id);
       }
       break;
   }    
@@ -267,6 +269,20 @@ new_window(struct gui* gui, int width, int height)
 {
   int fd;
   uint32* frame_buffer = (uint32*)mkwindow(&fd); 
+  struct window* win = (struct window*)malloc(sizeof(struct window));
+  win->fd = fd;
+  win->frame_buffer = frame_buffer;
+  win->width = width;
+  win->height = height;
+  win->state = 0;
+  return win;
+}
+
+struct window*
+new_applauncher(struct gui* gui, int width, int height)
+{
+  int fd;
+  uint32* frame_buffer = (uint32*)mkapplauncher(&fd); 
   struct window* win = (struct window*)malloc(sizeof(struct window));
   win->fd = fd;
   win->frame_buffer = frame_buffer;

@@ -43,7 +43,9 @@ entry("umount");
 entry("mkwindow");
 entry("updatewindow");
 entry("closewindow");
+entry("mkapplauncher");
 entry("testgraphics");
 entry("startinputhandler");
 entry("sigalarm");
 entry("sigreturn");
+

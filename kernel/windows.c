@@ -18,8 +18,9 @@
 
 struct spinlock windows_lock;
 struct window *head;
-struct window windows[MAX_WINDOWS];
-
+struct window windows[MAX_WINDOWS+1];
+struct window *applauncher;
+int applauncher_vis;
 int shift_held;
 
 struct {
@@ -35,17 +36,20 @@ struct {
   int steps;
 } header_held;
 
+
 void
 init_windows()
 {
   initlock(&windows_lock, "windows lock");
   char *window_frames = ((char*)kdisplaymem()) + FRAME_DATA_SIZE + CURSOR_DATA_SIZE;
-  for(int i = 0; i < MAX_WINDOWS; i++){
+  for(int i = 0; i < MAX_WINDOWS + 1; i++){
     initlock(&windows[i].lock, "window lock"); 
     windows[i].free = 1;
     windows[i].frame_buf = (uint32*)window_frames;
     window_frames += FRAME_DATA_SIZE;
   }
+  applauncher = &windows[MAX_WINDOWS];
+  applauncher_vis = 0;
   shift_held = 0;
 }
 
@@ -88,10 +92,33 @@ move_window_rel(struct window *win, int xrel, int yrel)
 
   if(oypos + yrel < 0){
     win->ypos = 0 + W_HEADER_SIZE;
-  } else if(oypos + oheight + yrel >= FRAME_HEIGHT){
-    win->ypos = FRAME_HEIGHT - W_BORDER_SIZE - win->height;
+  } else if(oypos + oheight + yrel >= FRAME_HEIGHT - TASKBAR_SIZE){
+    win->ypos = FRAME_HEIGHT - TASKBAR_SIZE - W_BORDER_SIZE - win->height;
   } else {
     win->ypos += yrel;
+  }
+}
+
+void
+display_taskbar()
+{
+  draw_rect(0, FRAME_HEIGHT-TASKBAR_SIZE, FRAME_WIDTH, TASKBAR_SIZE, C_LAUNCH_GRAY, 255);
+  draw_rect(0, FRAME_HEIGHT-TASKBAR_SIZE, TASKBAR_SIZE, TASKBAR_SIZE, C_LAUNCH_BLUE, 255);
+  draw_rect(8, FRAME_HEIGHT-TASKBAR_SIZE+8, TASKBAR_SIZE-16, TASKBAR_SIZE-16, C_WHITE, 255);
+  draw_rect(12, FRAME_HEIGHT-TASKBAR_SIZE+12, TASKBAR_SIZE-24, TASKBAR_SIZE-24, C_LAUNCH_BLUE, 255);
+}
+
+void
+display_applauncher()
+{
+  if(!applauncher_vis)
+    return;
+  uint32 pix;
+  for(int y = 0; y < applauncher->height; y++){
+    for(int x = 0; x < applauncher->width; x++){
+      pix = *(applauncher->frame_buf + y * applauncher->width + x);
+      set_pixel_hex(applauncher->xpos + x, applauncher->ypos + y, pix);
+    }
   }
 }
 
@@ -125,6 +152,8 @@ display_windows()
       win = win->prev;
     } while(win != head->prev);
   }
+  display_applauncher();
+  display_taskbar();
   send_frame_update();
 }
 
@@ -147,19 +176,35 @@ new_window(struct file *rf, struct file *wf)
   win->rf = rf;
   win->wf = wf;
   win->xpos = 300;
-  win->ypos = 300;
+  win->ypos = 100;
   if(!head){
     head = win;
     win->next = win;
     win->prev = win;
   } else{
-    win->prev = head->prev;
     win->next = head;
+    win->prev = head->prev;
     head->prev->next = win;
     head->prev = win;
+    head = win;
   }
   release(&windows_lock);
   return win;
+}
+
+struct window*
+make_applauncher(struct file *rf, struct file *wf)
+{
+  acquire(&windows_lock);
+  if(applauncher->free == 0)
+    panic("applauncher already made");
+  applauncher->free = 0;
+  applauncher->rf = rf;
+  applauncher->wf = wf;
+  applauncher->xpos = 0;
+  applauncher->ypos = 500;
+  release(&windows_lock);
+  return applauncher;
 }
 
 
@@ -205,6 +250,8 @@ close_window(struct window* win)
 struct window*
 find_window(struct file *rf)
 {
+  if(!applauncher->free && applauncher->rf == rf)
+    return applauncher;
   struct window* win = head;
   if(!win)
     return win;
@@ -252,6 +299,9 @@ update_window(struct file *rf, int width, int height)
   }
   win->width = width;
   win->height = height;
+  if(win == applauncher){
+    win->ypos = FRAME_HEIGHT - TASKBAR_SIZE - height;
+  }
   display_windows();
   release(&windows_lock);
   return 0;
@@ -262,6 +312,32 @@ abs_pos_to_rel(struct window *win, int xabs, int yabs, int *xrel, int *yrel)
 {
   *xrel = xabs - win->xpos;
   *yrel = yabs - win->ypos;
+}
+
+int
+is_pos_in_taskbar(int xpos, int ypos)
+{
+  if(ypos >= FRAME_HEIGHT - TASKBAR_SIZE)
+    return 1;
+  return 0;
+}
+
+int
+is_pos_in_launchbutton(int xpos, int ypos)
+{
+  if(!is_pos_in_taskbar(xpos, ypos))
+    return 0;
+  if(xpos < TASKBAR_SIZE)
+    return 1;
+  return 0;
+}
+
+int
+is_pos_in_applauncher(int xpos, int ypos)
+{
+  if(xpos >= applauncher->xpos && xpos < applauncher->xpos + applauncher->width && ypos >= applauncher->ypos && ypos < applauncher->ypos + applauncher->height)
+    return 1;
+  return 0;
 }
 
 int
@@ -337,6 +413,26 @@ void
 handle_left_click_press(uint timestamp, int xpos, int ypos)
 {
   acquire(&windows_lock);
+  if(!applauncher->free){
+    if(applauncher_vis){
+      if(is_pos_in_applauncher(xpos, ypos)){
+        handle_left_click_press_focused(timestamp, applauncher, xpos, ypos);
+        applauncher_vis = 0;
+        release(&windows_lock);
+        return;
+      } else {
+        applauncher_vis = 0;
+        display_windows();
+      }
+    } else {
+      if(is_pos_in_launchbutton(xpos, ypos)){
+        applauncher_vis = 1;
+        display_windows();
+        release(&windows_lock);
+        return;
+      }
+    }
+  }
   struct window* win = head;
   if(!win){
     release(&windows_lock);
@@ -437,7 +533,7 @@ handle_cursor_move(uint timestamp, int xpos, int ypos)
   acquire(&windows_lock);
   if(header_held.held){
     header_held.steps++;
-    if(!(header_held.steps % 3 == 0)){
+    if(!(header_held.steps % 4 == 0)){
       release(&windows_lock);
       return;
     }
@@ -452,11 +548,17 @@ handle_cursor_move(uint timestamp, int xpos, int ypos)
       release(&windows_lock);
       return;
     }
-    if(is_pos_in_window_frame(head, xpos, ypos)){
-      int xrelpos = xpos - head->xpos;
-      int yrelpos = ypos - head->ypos;
+    struct window *win = 0;
+    if(!applauncher->free && applauncher_vis && is_pos_in_applauncher(xpos, ypos))
+      win = applauncher;
+    else if(is_pos_in_window_frame(head, xpos, ypos))
+      win = head;
+
+    if(win){
+      int xrelpos = xpos - win->xpos;
+      int yrelpos = ypos - win->ypos;
       struct window_event event = {.timestamp = timestamp, .kind = W_KIND_MOUSE, .m_event.type = W_CUR_MOVE_ABS, .m_event.xval = xrelpos, .m_event.yval = yrelpos};
-      w_pipewrite(head->wf->w_pipe, (uint64)&event);
+      w_pipewrite(win->wf->w_pipe, (uint64)&event);
     }
   }
   release(&windows_lock);
@@ -466,7 +568,12 @@ void
 handle_keyboard(uint timestamp, int code, int val)
 {
   acquire(&windows_lock);
-  if(!head){
+  struct window *win;
+  if(!applauncher->free && applauncher_vis)
+    win = applauncher;
+  else
+    win = head;
+  if(!win){
     release(&windows_lock);
     return;
   }
@@ -490,7 +597,7 @@ handle_keyboard(uint timestamp, int code, int val)
   else
     c = lower_keys[code];
   struct window_event event = {.timestamp = timestamp, .kind = W_KIND_KEYBOARD, .k_event.ascii_val = c};
-  w_pipewrite(head->wf->w_pipe, (uint64)&event);
+  w_pipewrite(win->wf->w_pipe, (uint64)&event);
   release(&windows_lock);
 }
 
