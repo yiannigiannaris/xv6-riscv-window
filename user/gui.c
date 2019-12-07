@@ -4,6 +4,8 @@
 #include "user/gui.h"
 #include "user/draw.h"
 #include "kernel/window_event.h"
+#include "kernel/events.h"
+#include "kernel/input_handler.h"
 
 int fontsizes[5] = FONTSIZES;
 
@@ -69,6 +71,12 @@ void
 draw_textblock(struct gui* gui, struct window* window, struct elmt* elmt)
 {
   draw_elmt(gui, window, elmt);
+}
+
+void
+draw_rectangle(struct window* window, uint32 color, uint8 alpha)
+{
+  draw_rect(window->frame_buffer, window->width, window->height, 0, 0, window->width, window->height, color, alpha); 
 }
 
 void 
@@ -179,10 +187,13 @@ handle_mouse_event(struct window* window, struct window_event *event, struct elm
   }    
 } 
 
+
 void
 handle_keyboard_event(struct window* window, struct window_event *event, struct elmt *elmt)
 {
-
+  if(elmt->type != TEXTBOX)
+   return; 
+  elmt->keyboard_input(elmt->id, event->k_event.ascii_val);
 }
 
 void

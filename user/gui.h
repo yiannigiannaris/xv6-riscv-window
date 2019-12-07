@@ -3,6 +3,7 @@
 #define MAX_STATES 10
 
 typedef void (*event_handler)(int);
+typedef void (*event_keyboard_handler)(int, uint8);
 
 enum elmt_type {
   BUTTON,
@@ -14,6 +15,7 @@ struct elmt{
   enum elmt_type type;
   event_handler mlc;
   event_handler mrc; 
+  event_keyboard_handler keyboard_input;
   uint id;
   uint width;
   uint height;
@@ -26,6 +28,7 @@ struct elmt{
   uint8 border_alpha; 
   char *text;
   int textlength;
+  int text_maxsize;
   int fontsize;
   int textalignment;
   uint32 text_fill;
@@ -69,3 +72,4 @@ void add_elmt(struct state*, struct elmt*);
 void switch_state(struct window*, struct state*);
 struct elmt* new_elmt(enum elmt_type);
 void modify_elmt(void);
+void draw_rectangle(struct window*, uint32, uint8);

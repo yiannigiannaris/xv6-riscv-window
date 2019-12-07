@@ -91,6 +91,7 @@ w_pipewrite(struct w_pipe *pi, uint64 addr)
 int
 w_piperead(struct w_pipe *pi, uint64 addr)
 {
+  printf("w_piperead\n");
   struct window_event we;
   struct proc *pr = myproc();
 
@@ -113,6 +114,7 @@ w_piperead(struct w_pipe *pi, uint64 addr)
   }
   wakeup(&pi->nwrite);  //DOC: piperead-wakeup
   release(&pi->lock);
+  printf("got to read\n");
   return sizeof(struct window_event);
 }
 

@@ -8,6 +8,8 @@
 #include "kernel/colors.h"
 #include "user/gui.h"
 #include "user/uthread.h"
+#include "kernel/events.h"
+#include "kernel/keyconv.h"
 
 typedef signed long int64;
 
@@ -94,6 +96,12 @@ multi(struct c_float a, struct c_float b)
 struct c_float
 div(struct c_float a, struct c_float b)
 {
+ struct c_float f;
+ if(b.val == 0){
+   f.val = 99999999; 
+   f.decimal = 0;
+   return f;
+ }
  if(a.decimal < b.decimal){
    a.val *= pow(10, b.decimal - a.decimal);
  } else {
@@ -107,7 +115,7 @@ div(struct c_float a, struct c_float b)
   places += 1;
   temp /= 10; 
  }
- places = 12 - places;
+ places = 10 - places;
  int64 accuracy = pow(10, places);
  int64 decimal = (remainder*accuracy)/b.val;
  temp = decimal;
@@ -117,68 +125,80 @@ div(struct c_float a, struct c_float b)
   places *= 10;
   decimal_places += 1;
   temp /= 10; 
+  accuracy /= 10;
+ }
+ while(accuracy != 1){
+   places *= 10;
+   decimal_places += 1;
+   accuracy /=10; 
  }
  even_divide *= places;
  even_divide += decimal;
- struct c_float f = {.val = even_divide, .decimal = decimal_places};
+ while(decimal_places != 0 && even_divide % 10 == 0){
+   even_divide /= 10;
+   decimal_places--;
+ }
+ f.val = even_divide;
+ f.decimal = decimal_places;
  return f; 
 }
 
 void
-print_float(struct c_float f, char* num)
+print_float(struct c_float f, char* num, int show_decimal)
 {
   char *c = num;
-  int i; 
+  int i;  
   int neg = f.val < 0;
   if(neg)
     f.val = -1 * f.val;
   int putdec = f.decimal;
-  if(f.val == 0){
+  if(show_decimal && !putdec){
+    *c = '.'; 
+    c++;
+  }
+  if(f.val == 0 && f.decimal == 0){ 
     *c = '0';
+    c++;
   } else{
-    while(f.val != 0 || f.decimal >= 0){
+    while(f.val != 0 || f.decimal >= 0){ 
       if(f.decimal != 0 || !putdec){
-        i = f.val % 10;
+        i = f.val % 10; 
         *c = nums[i];
-        f.val = f.val / 10;
-      } else if(putdec){
-        if(f.val % 10 == 0){
-          *c = *(c - 1);
-          *(c - 1) = '.';
-        } else{
+        f.val = f.val / 10; 
+      } else {
         *c = '.';  
-        }
-      }
+      }   
       c++;
       f.decimal--;
-    } 
-    if(neg)
-      *c = '-';
+   }   
   }
-  c++;
+  if(neg){
+    *c = '-';
+    c++;
+  }
   *c = '\0'; 
   reverse(num, strlen(num));
   return;
 }
 
 void
-pop_button(struct elmt* button)
+pop_button(struct elmt* button, uint32 text_color, uint32 fill_color)
 {
   button->width = 100;
   button->height = 50;
   button->x = 50;
   button->y = 50;
-  button->main_fill = C_GRAY;
+  button->main_fill = fill_color;
   button->main_alpha = 255;
-  button->border = 2;  
+  button->border = 0;  
 
-  button->border_fill = C_BLUE;  
+  button->border_fill = 0;  
   button->border_alpha = 255;
   button->text = "Button 1";
   button->textlength = strlen(button->text);
   button->fontsize = 0;
   button->textalignment = 1;
-  button->text_fill = C_BLACK;
+  button->text_fill = text_color;
   button->text_alpha = 255;
   return;
 }
@@ -193,7 +213,7 @@ pop_textbox(struct elmt* textbox, int x, int y, int width, int height)
   textbox->y = y;
   textbox->main_fill = C_WHITE;
   textbox->main_alpha = 255;
-  textbox->border = 2;  
+  textbox->border = 0;  
   textbox->border_fill = C_BLUE;  
   textbox->border_alpha = 255;
   textbox->text = textbox_text;
@@ -217,15 +237,29 @@ enum ops op = NONE;
 void
 write_scratch()
 {
-  print_float(scratch, textbox_text);
+  if(decimal){
+    print_float(scratch, textbox_text, 1);
+  } else{
+    print_float(scratch, textbox_text, 0);
+  }
   textbox->text = textbox_text;
   textbox->textlength = strlen(textbox_text);
   modify_elmt();
 }
 
 void
+clear_scratch()
+{
+  scratch.val = 0;
+  scratch.decimal = 0;
+  decimal = 0;
+}
+
+void
 process_value(int i)
 {
+  char test[100];
+  print_float(scratch, test, 1);
   scratch.val = scratch.val * 10 + i;
   if(decimal){  
     scratch.decimal += 1;
@@ -234,13 +268,38 @@ process_value(int i)
 }
 
 void
-process_op(enum ops operation)
+perform_op(enum ops operation)
 {
-  if(op == NONE){
-    op = operation;
-    value = scratch;
+  char test[100];
+  //print_float(value, test);
+  print_float(scratch, test, 1);
+  switch (op){
+    case NONE:
+      value.val = scratch.val;
+      value.decimal = scratch.decimal;
+      break;
+    case ADD:
+      value = add(value, scratch);  
+      break;
+    case SUB:
+      value = subtract(value, scratch);
+      break;
+    case MULT:
+      value = multi(value, scratch);
+      break;
+    case DIV:
+      value = div(value, scratch);
+      break;
+    case EQ:
+    case PERC:
+      break;
   }
+  op = operation;
+  scratch = value;
+  write_scratch();
+  clear_scratch();
 }
+
 
 void handle_0(int id)
 {
@@ -249,6 +308,8 @@ void handle_0(int id)
 
 void handle_1(int id)
 {
+  char test[100];
+  print_float(scratch, test, 1);
   process_value(1);
 }
 
@@ -295,72 +356,78 @@ void handle_9(int id)
 void handle_decimal(int id)
 {
   decimal = 1;
-  scratch.decimal = decimal;
   write_scratch(); 
 }
 
 void handle_clear(int id)
 {
   decimal = 0;
-  scratch.decimal = 0;
-  scratch.val = 0;
+  clear_scratch();
+  value.val = 0;
+  value.decimal = 0;
   write_scratch();
   op = NONE;
 }
 
 void handle_neg_tog(int id)
 {
+  struct c_float i = {.val = -1, .decimal = 0};
+  scratch = multi(scratch, i);
+  write_scratch();
 }
 
-void handle_mod(int id)
+void handle_perc(int id)
 {
+  struct c_float i = {.val = 100, .decimal = 0};
+  scratch = div(scratch, i);
+  write_scratch();
 }
 
 
 void handle_multi(int id)
 {
-  process_op(MULT);
+  perform_op(MULT);
 }
 void handle_sub(int id)
 {
-  process_op(SUB);
+  perform_op(SUB);
 }
 
 void handle_add(int id)
 {
-  process_op(ADD);
+  perform_op(ADD);
 }
 
 void handle_div(int id)
 {
-  process_op(DIV);
-  return;
+  perform_op(DIV);
 }
 
 void handle_eq(int id)
 {
-  process_op(EQ);
+  perform_op(NONE);
+  scratch = value;
 }
 
 
 
 void
-pop_calc_button(struct elmt* button, int width, int height, char * text, int textlen)
+pop_calc_button(struct elmt* button, int width, int height, char * text, int textlen, uint32 fill_color, uint32 text_color)
 {
   button->width = width;
   button->height = height;
   button->x = 50;
   button->y = 50;
-  button->main_fill = C_GRAY;
+  button->main_fill = fill_color;
   button->main_alpha = 255;
-  button->border = 2;  
+  button->border = 0;  
   button->border_fill = C_BLUE;  
   button->border_alpha = 255;
   button->text = text;
   button->textlength = textlen;
   button->fontsize = 1;
   button->textalignment = 1;
-  button->text_fill = C_BLACK;
+  button->text_fill = text_color;
   button->text_alpha = 255;
 
 }
@@ -386,11 +453,79 @@ event_handler number_handlers[11] = {&handle_0, &handle_1, &handle_2, &handle_3,
 char *numbers[11] = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "."};
 struct elmt* tops_buttons[3];
 char *tops[3] = {"AC", "+/-", "%"};
-event_handler tops_handlers[3] = {&handle_clear, &handle_neg_tog, &handle_mod};
+event_handler tops_handlers[3] = {&handle_clear, &handle_neg_tog, &handle_perc};
 struct elmt* side_buttons[5];
 char *sides[5] = {"/", "*", "-", "+", "="};
 event_handler side_button_handlers[5] = {&handle_div, &handle_multi, &handle_sub, &handle_add, &handle_eq};
 
+void
+add_character(uint8 symbol)
+{
+  if(symbol == '.'){
+    number_handlers[10](0);
+  } else{
+    int value = symbol - 0x30;
+    if(value >= 0 && value <= 9){
+      number_handlers[value](0);
+    }
+  }
+
+}
+
+void
+remove_character()
+{
+  scratch.val /= 10;
+  if(scratch.decimal){
+    scratch.decimal--;
+  }
+  if(scratch.decimal == 0){
+    decimal = 0;
+  }
+  write_scratch();
+}
+
+
+void handle_textbox(int id)
+{
+}
+
+void handle_keyboard_input(int id, uint8 code)
+{
+  if(code == lower_keys[KEY_ESC]){
+    handle_clear(0);
+    return;
+  }
+  if(code == upper_keys[KEY_BACKSPACE]){
+    remove_character();
+  }
+
+  if(code == upper_keys[KEY_EQUAL]){
+    handle_add(0);
+    return;
+  }
+
+  if(code == lower_keys[KEY_MINUS]){
+    handle_sub(0);
+    return;
+  }
+   
+  if(code == upper_keys[KEY_8]){
+    handle_multi(0);
+    return;
+  } 
+
+  if(code == lower_keys[KEY_SLASH]){
+    handle_div(0);
+    return;
+  }
+
+  if(code == lower_keys[KEY_EQUAL] || code == lower_keys[KEY_ENTER]){
+    handle_eq(0);
+    return;
+  }
+  add_character(code);
+}
 
 void
 make_buttons(struct state* state)
@@ -400,21 +535,21 @@ make_buttons(struct state* state)
   int button_height = 50;
   for(int i = 0; i < 11; i++){
     button = new_elmt(BUTTON);
-    pop_calc_button(button, button_width, button_height, numbers[i], strlen(numbers[i]));
+    pop_calc_button(button, button_width, button_height, numbers[i], strlen(numbers[i]), C_CALC_DARK_GRAY, C_WHITE);
     button->mlc = number_handlers[i];
     numbers_buttons[i] = button;
     add_elmt(state, button);
   }  
   for(int i = 0; i < 3; i++){
     button = new_elmt(BUTTON);
-    pop_calc_button(button, button_width, button_height, tops[i], strlen(tops[i]));
+    pop_calc_button(button, button_width, button_height, tops[i], strlen(tops[i]), C_CALC_LIGHT_GRAY, C_BLACK);
     button->mlc = tops_handlers[i];
     tops_buttons[i] = button;
     add_elmt(state, button);
   } 
   for(int i = 0; i < 5; i++){
     button = new_elmt(BUTTON);
-    pop_calc_button(button, button_width, button_height, sides[i], strlen(sides[i]));
+    pop_calc_button(button, button_width, button_height, sides[i], strlen(sides[i]), C_CALC_ORANGE, C_WHITE);
     button->mlc = side_button_handlers[i];
     side_buttons[i] = button;
     add_elmt(state, button);
@@ -422,8 +557,8 @@ make_buttons(struct state* state)
   }
 
   int margin = 10;
-  int text_x = 100;
-  int text_y = 100;
+  int text_x = 5;
+  int text_y = 5;
   int text_height = 35;
   int top_x = text_x;
   int top_y = text_y + text_height + margin;
@@ -467,17 +602,19 @@ make_buttons(struct state* state)
 
   textbox = new_elmt(TEXTBOX);
   pop_textbox(textbox, text_x, text_y, 4*button_width + 3*margin, text_height);
+  textbox->mlc = handle_textbox;
+  textbox->keyboard_input = handle_keyboard_input;
   add_elmt(state, textbox);
 }
 
 void
 test_float()
 {
-  struct c_float a = {.val = 51408248, .decimal = 5};
-  struct c_float b = {.val = 617, .decimal = 0};
+  struct c_float a = {.val = 2, .decimal = 0};
+  struct c_float b = {.val = 100, .decimal = 0};
   struct c_float c = div(a , b); 
   char num[100];
-  print_float(c, num);
+  print_float(c, num, 1);
   printf("c: %s\n", num);
 }
 
@@ -487,13 +624,12 @@ int
 main(void)
 {
   test_float();
-  char *c = "hello";
   struct gui* gui = init_gui();
-  struct window* window1 = new_window(gui, 500, 500);  
+  struct window* window1 = new_window(gui, 235, 340);  
+  draw_rectangle(window1, C_WHITE, 255);
   struct state* state1 = new_state();
   add_state(window1, state1);
   add_window(gui, window1);
-  reverse(c, strlen(c));
   make_buttons(state1);
   loop(gui, window1);
   exit(0);
