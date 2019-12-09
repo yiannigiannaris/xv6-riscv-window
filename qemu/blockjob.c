@@ -33,6 +33,7 @@
 #include "qapi/qapi-events-block-core.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/coroutine.h"
+#include "qemu/main-loop.h"
 #include "qemu/timer.h"
 
 /*
@@ -87,18 +88,6 @@ void block_job_free(Job *job)
     block_job_remove_all_bdrv(bjob);
     blk_unref(bjob->blk);
     error_free(bjob->blocker);
-}
-
-void block_job_drain(Job *job)
-{
-    BlockJob *bjob = container_of(job, BlockJob, job);
-    const JobDriver *drv = job->driver;
-    BlockJobDriver *bjdrv = container_of(drv, BlockJobDriver, job_driver);
-
-    blk_drain(bjob->blk);
-    if (bjdrv->drain) {
-        bjdrv->drain(bjob);
-    }
 }
 
 static char *child_job_get_parent_desc(BdrvChild *c)
@@ -430,7 +419,6 @@ void *block_job_create(const char *job_id, const BlockJobDriver *driver,
     assert(is_block_job(&job->job));
     assert(job->job.driver->free == &block_job_free);
     assert(job->job.driver->user_resume == &block_job_user_resume);
-    assert(job->job.driver->drain == &block_job_drain);
 
     job->blk = blk;
 
@@ -454,6 +442,9 @@ void *block_job_create(const char *job_id, const BlockJobDriver *driver,
 
     bdrv_op_unblock(bs, BLOCK_OP_TYPE_DATAPLANE, job->blocker);
 
+    /* Disable request queuing in the BlockBackend to avoid deadlocks on drain:
+     * The job reports that it's busy until it reaches a pause point. */
+    blk_set_disable_request_queuing(blk, true);
     blk_set_allow_aio_context_change(blk, true);
 
     /* Only set speed when necessary to avoid NotSupported error */
