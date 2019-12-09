@@ -28,7 +28,6 @@
 #include "hw/ssi/ssi.h"
 #include "qemu/fifo32.h"
 #include "hw/stream.h"
-#include "hw/sysbus.h"
 
 typedef struct XilinxSPIPS XilinxSPIPS;
 

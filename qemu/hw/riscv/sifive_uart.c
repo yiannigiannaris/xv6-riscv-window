@@ -18,12 +18,10 @@
 
 #include "qemu/osdep.h"
 #include "qapi/error.h"
-#include "qemu/log.h"
 #include "hw/sysbus.h"
 #include "chardev/char.h"
 #include "chardev/char-fe.h"
-#include "hw/hw.h"
-#include "hw/irq.h"
+#include "target/riscv/cpu.h"
 #include "hw/riscv/sifive_uart.h"
 
 /*
@@ -95,8 +93,8 @@ uart_read(void *opaque, hwaddr addr, unsigned int size)
         return s->div;
     }
 
-    qemu_log_mask(LOG_GUEST_ERROR, "%s: bad read: addr=0x%x\n",
-                  __func__, (int)addr);
+    hw_error("%s: bad read: addr=0x%x\n",
+        __func__, (int)addr);
     return 0;
 }
 
@@ -127,8 +125,8 @@ uart_write(void *opaque, hwaddr addr,
         s->div = val64;
         return;
     }
-    qemu_log_mask(LOG_GUEST_ERROR, "%s: bad write: addr=0x%x v=0x%x\n",
-                  __func__, (int)addr, (int)value);
+    hw_error("%s: bad write: addr=0x%x v=0x%x\n",
+        __func__, (int)addr, (int)value);
 }
 
 static const MemoryRegionOps uart_ops = {

@@ -22,21 +22,22 @@
 #endif
 
 /* Ensure to exit the TB after this call! */
-void trigger_pgm_exception(CPUS390XState *env, uint32_t code)
+void trigger_pgm_exception(CPUS390XState *env, uint32_t code, uint32_t ilen)
 {
     CPUState *cs = env_cpu(env);
 
     cs->exception_index = EXCP_PGM;
     env->int_pgm_code = code;
-    /* env->int_pgm_ilen is already set, or will be set during unwinding */
+    env->int_pgm_ilen = ilen;
 }
 
-void s390_program_interrupt(CPUS390XState *env, uint32_t code, uintptr_t ra)
+void s390_program_interrupt(CPUS390XState *env, uint32_t code, int ilen,
+                            uintptr_t ra)
 {
     if (kvm_enabled()) {
         kvm_s390_program_interrupt(env_archcpu(env), code);
     } else if (tcg_enabled()) {
-        tcg_s390_program_interrupt(env, code, ra);
+        tcg_s390_program_interrupt(env, code, ilen, ra);
     } else {
         g_assert_not_reached();
     }

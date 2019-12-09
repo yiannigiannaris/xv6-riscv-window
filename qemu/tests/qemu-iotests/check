@@ -97,7 +97,6 @@ IMGFMT        -- $FULL_IMGFMT_DETAILS
 IMGPROTO      -- $IMGPROTO
 PLATFORM      -- $FULL_HOST_DETAILS
 TEST_DIR      -- $TEST_DIR
-SOCK_DIR      -- $SOCK_DIR
 SOCKET_SCM_HELPER -- $SOCKET_SCM_HELPER
 
 EOF
@@ -117,14 +116,10 @@ set_prog_path()
 if [ -z "$TEST_DIR" ]; then
         TEST_DIR=$PWD/scratch
 fi
-mkdir -p "$TEST_DIR" || _init_error 'Failed to create TEST_DIR'
 
-tmp_sock_dir=false
-if [ -z "$SOCK_DIR" ]; then
-    SOCK_DIR=$(mktemp -d)
-    tmp_sock_dir=true
+if [ ! -e "$TEST_DIR" ]; then
+        mkdir "$TEST_DIR"
 fi
-mkdir -p "$SOCK_DIR" || _init_error 'Failed to create SOCK_DIR'
 
 diff="diff -u"
 verbose=false
@@ -539,7 +534,6 @@ if [ -z "$SAMPLE_IMG_DIR" ]; then
 fi
 
 export TEST_DIR
-export SOCK_DIR
 export SAMPLE_IMG_DIR
 
 if [ -s $tmp.list ]
@@ -587,13 +581,13 @@ export QEMU_PROG="$(type -p "$QEMU_PROG")"
 
 case "$QEMU_PROG" in
     *qemu-system-arm|*qemu-system-aarch64)
-        export QEMU_OPTIONS="-nodefaults -display none -machine virt,accel=qtest"
+        export QEMU_OPTIONS="-nodefaults -machine virt,accel=qtest"
         ;;
     *qemu-system-tricore)
-        export QEMU_OPTIONS="-nodefaults -display none -machine tricore_testboard,accel=qtest"
+        export QEMU_OPTIONS="-nodefaults -machine tricore_testboard,accel=qtest"
         ;;
     *)
-        export QEMU_OPTIONS="-nodefaults -display none -machine accel=qtest"
+        export QEMU_OPTIONS="-nodefaults -machine accel=qtest"
         ;;
 esac
 
@@ -637,12 +631,6 @@ fi
 if [ -x "$build_iotests/socket_scm_helper" ]
 then
     export SOCKET_SCM_HELPER="$build_iotests/socket_scm_helper"
-fi
-
-python_usable=false
-if $PYTHON -c 'import sys; sys.exit(0 if sys.version_info >= (3,6) else 1)'
-then
-    python_usable=true
 fi
 
 default_machine=$($QEMU_PROG -machine help | sed -n '/(default)/ s/ .*//p')
@@ -706,12 +694,12 @@ END        { if (NR > 0) {
         if [ ! -z "$n_bad" -a $n_bad != 0 ]
         then
             echo "Failures:$bad"
-            echo "Failed $n_bad of $try iotests"
+            echo "Failed $n_bad of $try tests"
             echo "Failures:$bad" | fmt >>check.log
-            echo "Failed $n_bad of $try iotests" >>check.log
+            echo "Failed $n_bad of $try tests" >>check.log
         else
-            echo "Passed all $try iotests"
-            echo "Passed all $try iotests" >>check.log
+            echo "Passed all $try tests"
+            echo "Passed all $try tests" >>check.log
         fi
         needwrap=false
     fi
@@ -722,11 +710,6 @@ END        { if (NR > 0) {
     rm -f "${TEST_DIR}"/*.out "${TEST_DIR}"/*.err "${TEST_DIR}"/*.time
     rm -f "${TEST_DIR}"/check.pid "${TEST_DIR}"/check.sts
     rm -f $tmp.*
-
-    if $tmp_sock_dir
-    then
-        rm -rf "$SOCK_DIR"
-    fi
 }
 
 trap "_wrapup; exit \$status" 0 1 2 3 15
@@ -826,12 +809,7 @@ do
         start=$(_wallclock)
 
         if [ "$(head -n 1 "$source_iotests/$seq")" == "#!/usr/bin/env python" ]; then
-            if $python_usable; then
-                run_command="$PYTHON $seq"
-            else
-                run_command="false"
-                echo "Unsupported Python version" > $seq.notrun
-            fi
+            run_command="$PYTHON $seq"
         else
             run_command="./$seq"
         fi
@@ -887,7 +865,7 @@ do
             if [ ! -f "$reference" ]
             then
                 status="fail"
-                results="no qualified output"
+                reason="no qualified output"
                 err=true
             else
                 if diff -w "$reference" $tmp.out >/dev/null 2>&1

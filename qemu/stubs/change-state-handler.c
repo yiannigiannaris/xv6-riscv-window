@@ -1,5 +1,5 @@
 #include "qemu/osdep.h"
-#include "sysemu/runstate.h"
+#include "sysemu/sysemu.h"
 
 VMChangeStateEntry *qemu_add_vm_change_state_handler(VMChangeStateHandler *cb,
                                                      void *opaque)

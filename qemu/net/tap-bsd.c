@@ -27,6 +27,7 @@
 #include "qapi/error.h"
 #include "tap_int.h"
 #include "qemu/cutils.h"
+#include "sysemu/sysemu.h"
 #include "qemu/error-report.h"
 
 #if defined(__NetBSD__) || defined(__FreeBSD__)

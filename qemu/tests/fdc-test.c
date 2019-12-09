@@ -25,7 +25,7 @@
 #include "qemu/osdep.h"
 
 
-#include "libqtest-single.h"
+#include "libqtest.h"
 #include "qapi/qmp/qdict.h"
 #include "qemu-common.h"
 

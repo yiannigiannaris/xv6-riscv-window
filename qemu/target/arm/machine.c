@@ -1,5 +1,7 @@
 #include "qemu/osdep.h"
 #include "cpu.h"
+#include "hw/hw.h"
+#include "hw/boards.h"
 #include "qemu/error-report.h"
 #include "sysemu/kvm.h"
 #include "kvm_arm.h"
@@ -756,7 +758,6 @@ static int cpu_post_load(void *opaque, int version_id)
     if (!kvm_enabled()) {
         pmu_op_finish(&cpu->env);
     }
-    arm_rebuild_hflags(&cpu->env);
 
     return 0;
 }

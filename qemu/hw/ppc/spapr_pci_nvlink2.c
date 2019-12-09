@@ -39,7 +39,11 @@
 
 #define SPAPR_GPU_NUMA_ID           (cpu_to_be32(1))
 
-typedef struct SpaprPhbPciNvGpuSlot {
+struct spapr_phb_pci_nvgpu_config {
+    uint64_t nv2_ram_current;
+    uint64_t nv2_atsd_current;
+    int num; /* number of non empty (i.e. tgt!=0) entries in slots[] */
+    struct spapr_phb_pci_nvgpu_slot {
         uint64_t tgt;
         uint64_t gpa;
         unsigned numa_id;
@@ -50,18 +54,12 @@ typedef struct SpaprPhbPciNvGpuSlot {
             PCIDevice *npdev;
             uint32_t link_speed;
         } links[NVGPU_MAX_LINKS];
-} SpaprPhbPciNvGpuSlot;
-
-struct SpaprPhbPciNvGpuConfig {
-    uint64_t nv2_ram_current;
-    uint64_t nv2_atsd_current;
-    int num; /* number of non empty (i.e. tgt!=0) entries in slots[] */
-    SpaprPhbPciNvGpuSlot slots[NVGPU_MAX_NUM];
+    } slots[NVGPU_MAX_NUM];
     Error *errp;
 };
 
-static SpaprPhbPciNvGpuSlot *
-spapr_nvgpu_get_slot(SpaprPhbPciNvGpuConfig *nvgpus, uint64_t tgt)
+static struct spapr_phb_pci_nvgpu_slot *
+spapr_nvgpu_get_slot(struct spapr_phb_pci_nvgpu_config *nvgpus, uint64_t tgt)
 {
     int i;
 
@@ -83,13 +81,13 @@ spapr_nvgpu_get_slot(SpaprPhbPciNvGpuConfig *nvgpus, uint64_t tgt)
     return &nvgpus->slots[i];
 }
 
-static void spapr_pci_collect_nvgpu(SpaprPhbPciNvGpuConfig *nvgpus,
+static void spapr_pci_collect_nvgpu(struct spapr_phb_pci_nvgpu_config *nvgpus,
                                     PCIDevice *pdev, uint64_t tgt,
                                     MemoryRegion *mr, Error **errp)
 {
     MachineState *machine = MACHINE(qdev_get_machine());
     SpaprMachineState *spapr = SPAPR_MACHINE(machine);
-    SpaprPhbPciNvGpuSlot *nvslot = spapr_nvgpu_get_slot(nvgpus, tgt);
+    struct spapr_phb_pci_nvgpu_slot *nvslot = spapr_nvgpu_get_slot(nvgpus, tgt);
 
     if (!nvslot) {
         error_setg(errp, "Found too many GPUs per vPHB");
@@ -104,11 +102,11 @@ static void spapr_pci_collect_nvgpu(SpaprPhbPciNvGpuConfig *nvgpus,
     ++spapr->gpu_numa_id;
 }
 
-static void spapr_pci_collect_nvnpu(SpaprPhbPciNvGpuConfig *nvgpus,
+static void spapr_pci_collect_nvnpu(struct spapr_phb_pci_nvgpu_config *nvgpus,
                                     PCIDevice *pdev, uint64_t tgt,
                                     MemoryRegion *mr, Error **errp)
 {
-    SpaprPhbPciNvGpuSlot *nvslot = spapr_nvgpu_get_slot(nvgpus, tgt);
+    struct spapr_phb_pci_nvgpu_slot *nvslot = spapr_nvgpu_get_slot(nvgpus, tgt);
     int j;
 
     if (!nvslot) {
@@ -140,7 +138,7 @@ static void spapr_phb_pci_collect_nvgpu(PCIBus *bus, PCIDevice *pdev,
 
     if (tgt) {
         Error *local_err = NULL;
-        SpaprPhbPciNvGpuConfig *nvgpus = opaque;
+        struct spapr_phb_pci_nvgpu_config *nvgpus = opaque;
         Object *mr_gpu = object_property_get_link(po, "nvlink2-mr[0]", NULL);
         Object *mr_npu = object_property_get_link(po, "nvlink2-atsd-mr[0]",
                                                   NULL);
@@ -179,7 +177,7 @@ void spapr_phb_nvgpu_setup(SpaprPhbState *sphb, Error **errp)
         return;
     }
 
-    sphb->nvgpus = g_new0(SpaprPhbPciNvGpuConfig, 1);
+    sphb->nvgpus = g_new0(struct spapr_phb_pci_nvgpu_config, 1);
     sphb->nvgpus->nv2_ram_current = sphb->nv2_gpa_win_addr;
     sphb->nvgpus->nv2_atsd_current = sphb->nv2_atsd_win_addr;
 
@@ -196,7 +194,7 @@ void spapr_phb_nvgpu_setup(SpaprPhbState *sphb, Error **errp)
     /* Add found GPU RAM and ATSD MRs if found */
     for (i = 0, valid_gpu_num = 0; i < sphb->nvgpus->num; ++i) {
         Object *nvmrobj;
-        SpaprPhbPciNvGpuSlot *nvslot = &sphb->nvgpus->slots[i];
+        struct spapr_phb_pci_nvgpu_slot *nvslot = &sphb->nvgpus->slots[i];
 
         if (!nvslot->gpdev) {
             continue;
@@ -244,7 +242,7 @@ void spapr_phb_nvgpu_free(SpaprPhbState *sphb)
     }
 
     for (i = 0; i < sphb->nvgpus->num; ++i) {
-        SpaprPhbPciNvGpuSlot *nvslot = &sphb->nvgpus->slots[i];
+        struct spapr_phb_pci_nvgpu_slot *nvslot = &sphb->nvgpus->slots[i];
         Object *nv_mrobj = object_property_get_link(OBJECT(nvslot->gpdev),
                                                     "nvlink2-mr[0]", NULL);
 
@@ -278,7 +276,7 @@ void spapr_phb_nvgpu_populate_dt(SpaprPhbState *sphb, void *fdt, int bus_off,
     }
 
     for (i = 0; (i < sphb->nvgpus->num) && (atsdnum < ARRAY_SIZE(atsd)); ++i) {
-        SpaprPhbPciNvGpuSlot *nvslot = &sphb->nvgpus->slots[i];
+        struct spapr_phb_pci_nvgpu_slot *nvslot = &sphb->nvgpus->slots[i];
 
         if (!nvslot->gpdev) {
             continue;
@@ -356,7 +354,7 @@ void spapr_phb_nvgpu_ram_populate_dt(SpaprPhbState *sphb, void *fdt)
 
     /* Add memory nodes for GPU RAM and mark them unusable */
     for (i = 0; i < sphb->nvgpus->num; ++i) {
-        SpaprPhbPciNvGpuSlot *nvslot = &sphb->nvgpus->slots[i];
+        struct spapr_phb_pci_nvgpu_slot *nvslot = &sphb->nvgpus->slots[i];
         Object *nv_mrobj = object_property_get_link(OBJECT(nvslot->gpdev),
                                                     "nvlink2-mr[0]", NULL);
         uint32_t associativity[] = {
@@ -400,7 +398,7 @@ void spapr_phb_nvgpu_populate_pcidev_dt(PCIDevice *dev, void *fdt, int offset,
     }
 
     for (i = 0; i < sphb->nvgpus->num; ++i) {
-        SpaprPhbPciNvGpuSlot *nvslot = &sphb->nvgpus->slots[i];
+        struct spapr_phb_pci_nvgpu_slot *nvslot = &sphb->nvgpus->slots[i];
 
         /* Skip "slot" without attached GPU */
         if (!nvslot->gpdev) {

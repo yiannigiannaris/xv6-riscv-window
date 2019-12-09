@@ -10,6 +10,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "hw/sysbus.h"
 #include "qemu/module.h"
 #include "hw/empty_slot.h"

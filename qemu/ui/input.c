@@ -8,7 +8,6 @@
 #include "ui/input.h"
 #include "ui/console.h"
 #include "sysemu/replay.h"
-#include "sysemu/runstate.h"
 
 struct QemuInputHandlerState {
     DeviceState       *dev;

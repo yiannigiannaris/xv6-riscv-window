@@ -18,7 +18,6 @@
 #include "chardev/char-fe.h"
 #include "sysemu/kvm.h"
 #include "qemu/error-report.h"
-#include "qemu/main-loop.h"
 #include "qemu/sockets.h"
 #include "sysemu/cryptodev.h"
 #include "migration/migration.h"

@@ -27,8 +27,6 @@
 
 #include "net/net.h"
 #include "hw/cris/etraxfs_dma.h"
-#include "hw/qdev-properties.h"
-#include "hw/sysbus.h"
 
 /* Instantiate an ETRAXFS Ethernet MAC.  */
 static inline DeviceState *

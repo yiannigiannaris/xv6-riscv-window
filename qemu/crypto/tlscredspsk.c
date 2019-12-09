@@ -69,8 +69,7 @@ static int
 qcrypto_tls_creds_psk_load(QCryptoTLSCredsPSK *creds,
                            Error **errp)
 {
-    g_autofree char *pskfile = NULL;
-    g_autofree char *dhparams = NULL;
+    char *pskfile = NULL, *dhparams = NULL;
     const char *username;
     int ret;
     int rv = -1;
@@ -140,6 +139,8 @@ qcrypto_tls_creds_psk_load(QCryptoTLSCredsPSK *creds,
     rv = 0;
  cleanup:
     g_free(key.data);
+    g_free(pskfile);
+    g_free(dhparams);
     return rv;
 }
 

@@ -28,7 +28,7 @@
 #include "hw/arm/fsl-imx25.h"
 #include "sysemu/sysemu.h"
 #include "exec/address-spaces.h"
-#include "hw/qdev-properties.h"
+#include "hw/boards.h"
 #include "chardev/char.h"
 
 static void fsl_imx25_init(Object *obj)
@@ -36,9 +36,7 @@ static void fsl_imx25_init(Object *obj)
     FslIMX25State *s = FSL_IMX25(obj);
     int i;
 
-    object_initialize_child(obj, "cpu", &s->cpu, sizeof(s->cpu),
-                            ARM_CPU_TYPE_NAME("arm926"),
-                            &error_abort, NULL);
+    object_initialize(&s->cpu, sizeof(s->cpu), "arm926-" TYPE_ARM_CPU);
 
     sysbus_init_child_obj(obj, "avic", &s->avic, sizeof(s->avic),
                           TYPE_IMX_AVIC);

@@ -9,9 +9,9 @@ typedef struct V9fsString
 
 typedef struct V9fsQID
 {
-    uint8_t type;
-    uint32_t version;
-    uint64_t path;
+    int8_t type;
+    int32_t version;
+    int64_t path;
 } V9fsQID;
 
 typedef struct V9fsStat

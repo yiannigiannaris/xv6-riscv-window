@@ -17,9 +17,9 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/irq.h"
+#include "hw/boards.h"
+#include "sysemu/sysemu.h"
 #include "hw/sysbus.h"
-#include "migration/vmstate.h"
 #include "hw/qdev-core.h"
 #include "hw/pci/pci.h"
 #include "exec/address-spaces.h"
@@ -320,9 +320,6 @@ static int decode_ste(SMMUv3State *s, SMMUTransCfg *cfg,
     uint32_t config;
 
     if (!STE_VALID(ste)) {
-        if (!event->inval_ste_allowed) {
-            qemu_log_mask(LOG_GUEST_ERROR, "invalid STE\n");
-        }
         goto bad_ste;
     }
 
@@ -409,10 +406,8 @@ static int smmu_find_ste(SMMUv3State *s, uint32_t sid, STE *ste,
 
         if (!span) {
             /* l2ptr is not valid */
-            if (!event->inval_ste_allowed) {
-                qemu_log_mask(LOG_GUEST_ERROR,
-                              "invalid sid=%d (L1STD span=0)\n", sid);
-            }
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "invalid sid=%d (L1STD span=0)\n", sid);
             event->type = SMMU_EVT_C_BAD_STREAMID;
             return -EINVAL;
         }
@@ -607,9 +602,7 @@ static IOMMUTLBEntry smmuv3_translate(IOMMUMemoryRegion *mr, hwaddr addr,
     SMMUDevice *sdev = container_of(mr, SMMUDevice, iommu);
     SMMUv3State *s = sdev->smmu;
     uint32_t sid = smmu_get_sid(sdev);
-    SMMUEventInfo event = {.type = SMMU_EVT_NONE,
-                           .sid = sid,
-                           .inval_ste_allowed = false};
+    SMMUEventInfo event = {.type = SMMU_EVT_NONE, .sid = sid};
     SMMUPTWEventInfo ptw_info = {};
     SMMUTranslationStatus status;
     SMMUState *bs = ARM_SMMU(s);
@@ -802,13 +795,16 @@ static void smmuv3_notify_iova(IOMMUMemoryRegion *mr,
                                dma_addr_t iova)
 {
     SMMUDevice *sdev = container_of(mr, SMMUDevice, iommu);
-    SMMUEventInfo event = {.inval_ste_allowed = true};
+    SMMUEventInfo event = {};
     SMMUTransTableInfo *tt;
     SMMUTransCfg *cfg;
     IOMMUTLBEntry entry;
 
     cfg = smmuv3_get_config(sdev, &event);
     if (!cfg) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s error decoding the configuration for iommu mr=%s\n",
+                      __func__, mr->parent_obj.name);
         return;
     }
 
@@ -1469,21 +1465,20 @@ static void smmuv3_class_init(ObjectClass *klass, void *data)
     dc->realize = smmu_realize;
 }
 
-static int smmuv3_notify_flag_changed(IOMMUMemoryRegion *iommu,
-                                      IOMMUNotifierFlag old,
-                                      IOMMUNotifierFlag new,
-                                      Error **errp)
+static void smmuv3_notify_flag_changed(IOMMUMemoryRegion *iommu,
+                                       IOMMUNotifierFlag old,
+                                       IOMMUNotifierFlag new)
 {
     SMMUDevice *sdev = container_of(iommu, SMMUDevice, iommu);
     SMMUv3State *s3 = sdev->smmu;
     SMMUState *s = &(s3->smmu_state);
 
     if (new & IOMMU_NOTIFIER_MAP) {
-        error_setg(errp,
-                   "device %02x.%02x.%x requires iommu MAP notifier which is "
-                   "not currently supported", pci_bus_num(sdev->bus),
-                   PCI_SLOT(sdev->devfn), PCI_FUNC(sdev->devfn));
-        return -EINVAL;
+        int bus_num = pci_bus_num(sdev->bus);
+        PCIDevice *pcidev = pci_find_device(sdev->bus, bus_num, sdev->devfn);
+
+        warn_report("SMMUv3 does not support notification on MAP: "
+                     "device %s will not function properly", pcidev->name);
     }
 
     if (old == IOMMU_NOTIFIER_NONE) {
@@ -1493,7 +1488,6 @@ static int smmuv3_notify_flag_changed(IOMMUMemoryRegion *iommu,
         trace_smmuv3_notify_flag_del(iommu->parent_obj.name);
         QLIST_REMOVE(sdev, next);
     }
-    return 0;
 }
 
 static void smmuv3_iommu_memory_region_class_init(ObjectClass *klass,

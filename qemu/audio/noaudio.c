@@ -33,27 +33,43 @@
 
 typedef struct NoVoiceOut {
     HWVoiceOut hw;
-    RateCtl rate;
+    int64_t old_ticks;
 } NoVoiceOut;
 
 typedef struct NoVoiceIn {
     HWVoiceIn hw;
-    RateCtl rate;
+    int64_t old_ticks;
 } NoVoiceIn;
 
-static size_t no_write(HWVoiceOut *hw, void *buf, size_t len)
+static int no_run_out (HWVoiceOut *hw, int live)
 {
     NoVoiceOut *no = (NoVoiceOut *) hw;
-    return audio_rate_get_bytes(&hw->info, &no->rate, len);
+    int decr, samples;
+    int64_t now;
+    int64_t ticks;
+    int64_t bytes;
+
+    now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    ticks = now - no->old_ticks;
+    bytes = muldiv64(ticks, hw->info.bytes_per_second, NANOSECONDS_PER_SECOND);
+    bytes = audio_MIN(bytes, INT_MAX);
+    samples = bytes >> hw->info.shift;
+
+    no->old_ticks = now;
+    decr = audio_MIN (live, samples);
+    hw->rpos = (hw->rpos + decr) % hw->samples;
+    return decr;
+}
+
+static int no_write (SWVoiceOut *sw, void *buf, int len)
+{
+    return audio_pcm_sw_write(sw, buf, len);
 }
 
 static int no_init_out(HWVoiceOut *hw, struct audsettings *as, void *drv_opaque)
 {
-    NoVoiceOut *no = (NoVoiceOut *) hw;
-
     audio_pcm_init_info (&hw->info, as);
     hw->samples = 1024;
-    audio_rate_start(&no->rate);
     return 0;
 }
 
@@ -62,22 +78,17 @@ static void no_fini_out (HWVoiceOut *hw)
     (void) hw;
 }
 
-static void no_enable_out(HWVoiceOut *hw, bool enable)
+static int no_ctl_out (HWVoiceOut *hw, int cmd, ...)
 {
-    NoVoiceOut *no = (NoVoiceOut *) hw;
-
-    if (enable) {
-        audio_rate_start(&no->rate);
-    }
+    (void) hw;
+    (void) cmd;
+    return 0;
 }
 
 static int no_init_in(HWVoiceIn *hw, struct audsettings *as, void *drv_opaque)
 {
-    NoVoiceIn *no = (NoVoiceIn *) hw;
-
     audio_pcm_init_info (&hw->info, as);
     hw->samples = 1024;
-    audio_rate_start(&no->rate);
     return 0;
 }
 
@@ -86,22 +97,44 @@ static void no_fini_in (HWVoiceIn *hw)
     (void) hw;
 }
 
-static size_t no_read(HWVoiceIn *hw, void *buf, size_t size)
+static int no_run_in (HWVoiceIn *hw)
 {
     NoVoiceIn *no = (NoVoiceIn *) hw;
-    int64_t bytes = audio_rate_get_bytes(&hw->info, &no->rate, size);
+    int live = audio_pcm_hw_get_live_in (hw);
+    int dead = hw->samples - live;
+    int samples = 0;
 
-    audio_pcm_info_clear_buf(&hw->info, buf, bytes / hw->info.bytes_per_frame);
-    return bytes;
+    if (dead) {
+        int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        int64_t ticks = now - no->old_ticks;
+        int64_t bytes =
+            muldiv64(ticks, hw->info.bytes_per_second, NANOSECONDS_PER_SECOND);
+
+        no->old_ticks = now;
+        bytes = audio_MIN (bytes, INT_MAX);
+        samples = bytes >> hw->info.shift;
+        samples = audio_MIN (samples, dead);
+    }
+    return samples;
 }
 
-static void no_enable_in(HWVoiceIn *hw, bool enable)
+static int no_read (SWVoiceIn *sw, void *buf, int size)
 {
-    NoVoiceIn *no = (NoVoiceIn *) hw;
+    /* use custom code here instead of audio_pcm_sw_read() to avoid
+     * useless resampling/mixing */
+    int samples = size >> sw->info.shift;
+    int total = sw->hw->total_samples_captured - sw->total_hw_samples_acquired;
+    int to_clear = audio_MIN (samples, total);
+    sw->total_hw_samples_acquired += total;
+    audio_pcm_info_clear_buf (&sw->info, buf, to_clear);
+    return to_clear << sw->info.shift;
+}
 
-    if (enable) {
-        audio_rate_start(&no->rate);
-    }
+static int no_ctl_in (HWVoiceIn *hw, int cmd, ...)
+{
+    (void) hw;
+    (void) cmd;
+    return 0;
 }
 
 static void *no_audio_init(Audiodev *dev)
@@ -117,13 +150,15 @@ static void no_audio_fini (void *opaque)
 static struct audio_pcm_ops no_pcm_ops = {
     .init_out = no_init_out,
     .fini_out = no_fini_out,
+    .run_out  = no_run_out,
     .write    = no_write,
-    .enable_out = no_enable_out,
+    .ctl_out  = no_ctl_out,
 
     .init_in  = no_init_in,
     .fini_in  = no_fini_in,
+    .run_in   = no_run_in,
     .read     = no_read,
-    .enable_in = no_enable_in
+    .ctl_in   = no_ctl_in
 };
 
 static struct audio_driver no_audio_driver = {

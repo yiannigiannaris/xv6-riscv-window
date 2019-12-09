@@ -8,7 +8,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "libqtest-single.h"
+#include "libqtest.h"
 
 /* Tests only initialization so far. TODO: Replace with functional tests */
 static void nop(void)

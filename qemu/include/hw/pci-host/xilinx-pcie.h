@@ -20,6 +20,7 @@
 #ifndef HW_XILINX_PCIE_H
 #define HW_XILINX_PCIE_H
 
+#include "hw/hw.h"
 #include "hw/sysbus.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bridge.h"

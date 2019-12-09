@@ -10,10 +10,8 @@
 #include "qemu/log.h"
 #include "qemu/module.h"
 #include "qapi/error.h"
-#include "hw/irq.h"
-#include "hw/qdev-properties.h"
+#include "hw/hw.h"
 #include "hw/sysbus.h"
-#include "migration/vmstate.h"
 #include "exec/memory.h"
 
 #define TYPE_OR1K_OMPIC "or1k-ompic"

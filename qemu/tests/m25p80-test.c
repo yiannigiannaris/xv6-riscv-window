@@ -25,7 +25,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/bswap.h"
-#include "libqtest-single.h"
+#include "libqtest.h"
 
 /*
  * ASPEED SPI Controller registers

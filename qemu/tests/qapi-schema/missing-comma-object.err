@@ -1,1 +1,1 @@
-missing-comma-object.json:2:3: expected ',' or '}'
+tests/qapi-schema/missing-comma-object.json:2:3: Expected "," or "}"

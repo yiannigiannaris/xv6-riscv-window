@@ -9,7 +9,7 @@
 #ifndef QEMU_HW_DISPLAY_VGA_H
 #define QEMU_HW_DISPLAY_VGA_H
 
-#include "exec/hwaddr.h"
+#include "exec/memory.h"
 
 enum vga_retrace_method {
     VGA_RETRACE_DUMB,

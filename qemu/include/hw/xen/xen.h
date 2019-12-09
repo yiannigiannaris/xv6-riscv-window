@@ -9,6 +9,7 @@
  */
 
 #include "exec/cpu-common.h"
+#include "hw/irq.h"
 
 /* xen-machine.c */
 enum xen_mode {

@@ -40,8 +40,7 @@ _supported_fmt qcow qcow2 vmdk qed
 _supported_proto file
 _unsupported_imgopts "subformat=monolithicFlat" \
                      "subformat=twoGbMaxExtentFlat" \
-                     "subformat=twoGbMaxExtentSparse" \
-                     "subformat=streamOptimized"
+                     "subformat=twoGbMaxExtentSparse"
 
 CLUSTER_SIZE=4k
 size=128M

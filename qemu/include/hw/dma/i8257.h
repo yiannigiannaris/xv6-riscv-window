@@ -1,6 +1,7 @@
 #ifndef HW_I8257_H
 #define HW_I8257_H
 
+#include "hw/hw.h"
 #include "hw/isa/isa.h"
 #include "exec/ioport.h"
 

@@ -16,6 +16,7 @@
  * Lesser General Public License for more details.
  */
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "hw/pci/pci.h"
 #include "hw/scsi/scsi.h"
 

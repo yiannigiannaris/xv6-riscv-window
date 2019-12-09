@@ -16,6 +16,7 @@
 #define QEMU_FSDEV_THROTTLE_H
 
 #include "block/aio.h"
+#include "qemu/main-loop.h"
 #include "qemu/coroutine.h"
 #include "qemu/throttle.h"
 
@@ -26,7 +27,7 @@ typedef struct FsThrottle {
     CoQueue      throttled_reqs[2];
 } FsThrottle;
 
-int fsdev_throttle_parse_opts(QemuOpts *, FsThrottle *, Error **);
+void fsdev_throttle_parse_opts(QemuOpts *, FsThrottle *, Error **);
 
 void fsdev_throttle_init(FsThrottle *);
 

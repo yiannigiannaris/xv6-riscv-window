@@ -30,7 +30,6 @@
 #include "qemu/units.h"
 #include "qapi/error.h"
 #include "qemu/timer.h"
-#include "sysemu/runstate.h"
 #include "sysemu/sysemu.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/error-report.h"
@@ -41,10 +40,7 @@
 #include <usbredirparser.h>
 #include <usbredirfilter.h>
 
-#include "hw/qdev-properties.h"
 #include "hw/usb.h"
-#include "migration/qemu-file-types.h"
-#include "migration/vmstate.h"
 
 /* ERROR is defined below. Remove any previous definition. */
 #undef ERROR
@@ -819,8 +815,8 @@ static void usbredir_handle_interrupt_in_data(USBRedirDevice *dev,
                                               USBPacket *p, uint8_t ep)
 {
     /* Input interrupt endpoint, buffered packet input */
-    struct buf_packet *intp, *intp_to_free;
-    int status, len, sum;
+    struct buf_packet *intp;
+    int status, len;
 
     if (!dev->endpoint[EP2I(ep)].interrupt_started &&
             !dev->endpoint[EP2I(ep)].interrupt_error) {
@@ -839,17 +835,9 @@ static void usbredir_handle_interrupt_in_data(USBRedirDevice *dev,
         dev->endpoint[EP2I(ep)].bufpq_dropping_packets = 0;
     }
 
-    /* check for completed interrupt message (with all fragments) */
-    sum = 0;
-    QTAILQ_FOREACH(intp, &dev->endpoint[EP2I(ep)].bufpq, next) {
-        sum += intp->len;
-        if (intp->len < dev->endpoint[EP2I(ep)].max_packet_size ||
-            sum >= p->iov.size)
-            break;
-    }
-
+    intp = QTAILQ_FIRST(&dev->endpoint[EP2I(ep)].bufpq);
     if (intp == NULL) {
-        DPRINTF2("interrupt-token-in ep %02X, no intp, buffered %d\n", ep, sum);
+        DPRINTF2("interrupt-token-in ep %02X, no intp\n", ep);
         /* Check interrupt_error for stream errors */
         status = dev->endpoint[EP2I(ep)].interrupt_error;
         dev->endpoint[EP2I(ep)].interrupt_error = 0;
@@ -860,42 +848,18 @@ static void usbredir_handle_interrupt_in_data(USBRedirDevice *dev,
         }
         return;
     }
+    DPRINTF("interrupt-token-in ep %02X status %d len %d\n", ep,
+            intp->status, intp->len);
 
-    /* copy of completed interrupt message */
-    sum = 0;
-    status = usb_redir_success;
-    intp_to_free = NULL;
-    QTAILQ_FOREACH(intp, &dev->endpoint[EP2I(ep)].bufpq, next) {
-        if (intp_to_free) {
-            bufp_free(dev, intp_to_free, ep);
-        }
-        DPRINTF("interrupt-token-in ep %02X fragment status %d len %d\n", ep,
-                intp->status, intp->len);
-
-        sum += intp->len;
-        len = intp->len;
-        if (status == usb_redir_success) {
-            status = intp->status;
-        }
-        if (sum > p->iov.size) {
-            ERROR("received int data is larger then packet ep %02X\n", ep);
-            len -= (sum - p->iov.size);
-            sum = p->iov.size;
-            status = usb_redir_babble;
-        }
-
-        usb_packet_copy(p, intp->data, len);
-
-        intp_to_free = intp;
-        if (intp->len < dev->endpoint[EP2I(ep)].max_packet_size ||
-            sum >= p->iov.size)
-            break;
+    status = intp->status;
+    len = intp->len;
+    if (len > p->iov.size) {
+        ERROR("received int data is larger then packet ep %02X\n", ep);
+        len = p->iov.size;
+        status = usb_redir_babble;
     }
-    if (intp_to_free) {
-        bufp_free(dev, intp_to_free, ep);
-    }
-    DPRINTF("interrupt-token-in ep %02X summary status %d len %d\n", ep,
-            status, sum);
+    usb_packet_copy(p, intp->data, len);
+    bufp_free(dev, intp, ep);
     usbredir_handle_status(dev, p, status);
 }
 
@@ -1531,11 +1495,6 @@ static void usbredir_check_bulk_receiving(USBRedirDevice *dev)
     for (i = EP2I(USB_DIR_IN); i < MAX_ENDPOINTS; i++) {
         dev->endpoint[i].bulk_receiving_enabled = 0;
     }
-
-    if (dev->interface_info.interface_count == NO_INTERFACE_INFO) {
-        return;
-    }
-
     for (i = 0; i < dev->interface_info.interface_count; i++) {
         quirks = usb_get_quirks(dev->device_info.vendor_id,
                                 dev->device_info.product_id,
@@ -2073,17 +2032,22 @@ static void usbredir_interrupt_packet(void *priv, uint64_t id,
     }
 
     if (ep & USB_DIR_IN) {
+        bool q_was_empty;
+
         if (dev->endpoint[EP2I(ep)].interrupt_started == 0) {
             DPRINTF("received int packet while not started ep %02X\n", ep);
             free(data);
             return;
         }
 
+        q_was_empty = QTAILQ_EMPTY(&dev->endpoint[EP2I(ep)].bufpq);
+
         /* bufp_alloc also adds the packet to the ep queue */
         bufp_alloc(dev, data, data_len, interrupt_packet->status, ep, data);
 
-        /* insufficient data solved with USB_RET_NAK */
-        usb_wakeup(usb_ep_get(&dev->dev, USB_TOKEN_IN, ep & 0x0f), 0);
+        if (q_was_empty) {
+            usb_wakeup(usb_ep_get(&dev->dev, USB_TOKEN_IN, ep & 0x0f), 0);
+        }
     } else {
         /*
          * We report output interrupt packets as completed directly upon

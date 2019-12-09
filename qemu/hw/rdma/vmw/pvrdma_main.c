@@ -16,13 +16,16 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/module.h"
+#include "hw/hw.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_ids.h"
 #include "hw/pci/msi.h"
 #include "hw/pci/msix.h"
+#include "hw/qdev-core.h"
 #include "hw/qdev-properties.h"
 #include "cpu.h"
 #include "trace.h"
+#include "sysemu/sysemu.h"
 #include "monitor/monitor.h"
 #include "hw/rdma/rdma.h"
 
@@ -33,7 +36,6 @@
 #include <infiniband/verbs.h>
 #include "pvrdma.h"
 #include "standard-headers/rdma/vmw_pvrdma-abi.h"
-#include "sysemu/runstate.h"
 #include "standard-headers/drivers/infiniband/hw/vmw_pvrdma/pvrdma_dev_api.h"
 #include "pvrdma_qp_ops.h"
 
@@ -601,7 +603,7 @@ static void pvrdma_realize(PCIDevice *pdev, Error **errp)
     rdma_info_report("Initializing device %s %x.%x", pdev->name,
                      PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
 
-    if (TARGET_PAGE_SIZE != qemu_real_host_page_size) {
+    if (TARGET_PAGE_SIZE != getpagesize()) {
         error_setg(errp, "Target page size must be the same as host page size");
         return;
     }
@@ -663,12 +665,6 @@ static void pvrdma_realize(PCIDevice *pdev, Error **errp)
 
     dev->shutdown_notifier.notify = pvrdma_shutdown_notifier;
     qemu_register_shutdown_notifier(&dev->shutdown_notifier);
-
-#ifdef LEGACY_RDMA_REG_MR
-    rdma_info_report("Using legacy reg_mr");
-#else
-    rdma_info_report("Using iova reg_mr");
-#endif
 
 out:
     if (rc) {

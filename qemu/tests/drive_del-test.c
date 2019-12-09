@@ -121,8 +121,7 @@ static void test_drive_del_device_del(void)
     QTestState *qts;
 
     /* Start with a drive used by a device that unplugs instantaneously */
-    qts = qtest_initf("-drive if=none,id=drive0,file=null-co://,"
-                      "file.read-zeroes=on,format=raw"
+    qts = qtest_initf("-drive if=none,id=drive0,file=null-co://,format=raw"
                       " -device virtio-scsi-%s"
                       " -device scsi-hd,drive=drive0,id=dev0",
                       qvirtio_get_dev_type());

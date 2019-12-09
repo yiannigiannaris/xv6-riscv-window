@@ -26,12 +26,9 @@
 #include "qemu/timer.h"
 #include "qemu/queue.h"
 #include "qemu/atomic.h"
-#include "qemu/main-loop.h"
 #include "qemu/module.h"
-#include "hw/qdev-properties.h"
-#include "sysemu/runstate.h"
+#include "sysemu/sysemu.h"
 #include "migration/blocker.h"
-#include "migration/vmstate.h"
 #include "trace.h"
 
 #include "qxl.h"

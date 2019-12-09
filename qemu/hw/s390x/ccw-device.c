@@ -11,7 +11,6 @@
 
 #include "qemu/osdep.h"
 #include "ccw-device.h"
-#include "hw/qdev-properties.h"
 #include "qemu/module.h"
 
 static void ccw_device_refill_ids(CcwDevice *dev)

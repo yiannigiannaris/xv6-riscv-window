@@ -25,6 +25,7 @@
 
 #include "qemu/host-utils.h"
 #include "qemu/thread.h"
+#include "qemu/queue.h"
 #ifdef CONFIG_TCG
 #include "tcg-target.h"
 #endif
@@ -32,7 +33,7 @@
 #include "exec/hwaddr.h"
 #endif
 #include "exec/memattrs.h"
-#include "hw/core/cpu.h"
+#include "qom/cpu.h"
 
 #include "cpu-param.h"
 
@@ -214,7 +215,6 @@ typedef struct CPUTLBCommon {
  * Since this is placed within CPUNegativeOffsetState, the smallest
  * negative offsets are at the end of the struct.
  */
-
 typedef struct CPUTLB {
     CPUTLBCommon c;
     CPUTLBDesc d[NB_MMU_MODES];
@@ -232,7 +232,7 @@ typedef struct CPUTLB { } CPUTLB;
 #endif  /* !CONFIG_USER_ONLY && CONFIG_TCG */
 
 /*
- * This structure must be placed in ArchCPU immediately
+ * This structure must be placed in ArchCPU immedately
  * before CPUArchState, as a field named "neg".
  */
 typedef struct CPUNegativeOffsetState {

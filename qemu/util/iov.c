@@ -401,16 +401,6 @@ static struct iovec *qiov_slice(QEMUIOVector *qiov,
     return iov;
 }
 
-int qemu_iovec_subvec_niov(QEMUIOVector *qiov, size_t offset, size_t len)
-{
-    size_t head, tail;
-    int niov;
-
-    qiov_slice(qiov, offset, len, &head, &tail, &niov);
-
-    return niov;
-}
-
 /*
  * Compile new iovec, combining @head_buf buffer, sub-qiov of @mid_qiov,
  * and @tail_buf buffer into new qiov.
@@ -423,7 +413,7 @@ void qemu_iovec_init_extended(
 {
     size_t mid_head, mid_tail;
     int total_niov, mid_niov = 0;
-    struct iovec *p, *mid_iov = NULL;
+    struct iovec *p, *mid_iov;
 
     if (mid_len) {
         mid_iov = qiov_slice(mid_qiov, mid_offset, mid_len,
@@ -446,8 +436,7 @@ void qemu_iovec_init_extended(
         p++;
     }
 
-    assert(!mid_niov == !mid_len);
-    if (mid_niov) {
+    if (mid_len) {
         memcpy(p, mid_iov, mid_niov * sizeof(*p));
         p[0].iov_base = (uint8_t *)p[0].iov_base + mid_head;
         p[0].iov_len -= mid_head;

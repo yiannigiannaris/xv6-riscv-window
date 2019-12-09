@@ -444,14 +444,16 @@ static void test_visitor_in_fuzz(TestInputVisitorData *data,
     char buf[10000];
 
     for (i = 0; i < 100; i++) {
-        unsigned int j, k;
+        unsigned int j;
 
         j = g_test_rand_int_range(0, sizeof(buf) - 1);
 
         buf[j] = '\0';
 
-        for (k = 0; k != j; k++) {
-            buf[k] = (char)g_test_rand_int_range(0, 256);
+        if (j != 0) {
+            for (j--; j != 0; j--) {
+                buf[j - 1] = (char)g_test_rand_int_range(0, 256);
+            }
         }
 
         v = visitor_input_test_init(data, buf);

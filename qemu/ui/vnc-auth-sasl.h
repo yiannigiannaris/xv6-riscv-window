@@ -30,6 +30,7 @@
 typedef struct VncStateSASL VncStateSASL;
 typedef struct VncDisplaySASL VncDisplaySASL;
 
+#include "qemu/main-loop.h"
 #include "authz/base.h"
 
 struct VncStateSASL {

@@ -19,7 +19,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/irq.h"
+#include "hw/hw.h"
 #include "cpu.h"
 
 /* OpenRISC pic handler */

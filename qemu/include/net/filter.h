@@ -10,7 +10,6 @@
 #define QEMU_NET_FILTER_H
 
 #include "qapi/qapi-types-net.h"
-#include "qemu/queue.h"
 #include "qom/object.h"
 #include "net/queue.h"
 

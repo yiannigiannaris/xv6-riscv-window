@@ -11,7 +11,6 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/qdev-properties.h"
 #include "hw/virtio/virtio-gpu.h"
 #include "chardev/char-fe.h"
 #include "qapi/error.h"

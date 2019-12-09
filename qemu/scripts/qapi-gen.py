@@ -5,18 +5,16 @@
 # See the COPYING file in the top-level directory.
 
 from __future__ import print_function
-
 import argparse
 import re
 import sys
-
-from qapi.commands import gen_commands
-from qapi.doc import gen_doc
-from qapi.events import gen_events
-from qapi.introspect import gen_introspect
-from qapi.schema import QAPIError, QAPISchema
+from qapi.common import QAPIError, QAPISchema
 from qapi.types import gen_types
 from qapi.visit import gen_visit
+from qapi.commands import gen_commands
+from qapi.events import gen_events
+from qapi.introspect import gen_introspect
+from qapi.doc import gen_doc
 
 
 def main(argv):

@@ -21,7 +21,6 @@
 #define PPC_PNV_CORE_H
 
 #include "hw/cpu/core.h"
-#include "target/ppc/cpu.h"
 
 #define TYPE_PNV_CORE "powernv-cpu-core"
 #define PNV_CORE(obj) \
@@ -31,8 +30,6 @@
 #define PNV_CORE_GET_CLASS(obj) \
      OBJECT_GET_CLASS(PnvCoreClass, (obj), TYPE_PNV_CORE)
 
-typedef struct PnvChip PnvChip;
-
 typedef struct PnvCore {
     /*< private >*/
     CPUCore parent_obj;
@@ -40,7 +37,6 @@ typedef struct PnvCore {
     /*< public >*/
     PowerPCCPU **threads;
     uint32_t pir;
-    PnvChip *chip;
 
     MemoryRegion xscom_regs;
 } PnvCore;

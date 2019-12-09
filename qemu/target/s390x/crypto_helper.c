@@ -13,7 +13,6 @@
 #include "qemu/osdep.h"
 #include "qemu/main-loop.h"
 #include "internal.h"
-#include "tcg_s390x.h"
 #include "exec/helper-proto.h"
 #include "exec/exec-all.h"
 #include "exec/cpu_ldst.h"
@@ -35,14 +34,16 @@ uint32_t HELPER(msa)(CPUS390XState *env, uint32_t r1, uint32_t r2, uint32_t r3,
     case S390_FEAT_TYPE_PCKMO:
     case S390_FEAT_TYPE_PCC:
         if (mod) {
-            tcg_s390_program_interrupt(env, PGM_SPECIFICATION, ra);
+            s390_program_interrupt(env, PGM_SPECIFICATION, 4, ra);
+            return 0;
         }
         break;
     }
 
     s390_get_feat_block(type, subfunc);
     if (!test_be_bit(fc, subfunc)) {
-        tcg_s390_program_interrupt(env, PGM_SPECIFICATION, ra);
+        s390_program_interrupt(env, PGM_SPECIFICATION, 4, ra);
+        return 0;
     }
 
     switch (fc) {

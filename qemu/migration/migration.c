@@ -16,13 +16,10 @@
 #include "qemu/osdep.h"
 #include "qemu/cutils.h"
 #include "qemu/error-report.h"
-#include "qemu/main-loop.h"
 #include "migration/blocker.h"
 #include "exec.h"
 #include "fd.h"
 #include "socket.h"
-#include "sysemu/runstate.h"
-#include "sysemu/sysemu.h"
 #include "rdma.h"
 #include "ram.h"
 #include "migration/global_state.h"
@@ -49,10 +46,8 @@
 #include "io/channel-buffer.h"
 #include "migration/colo.h"
 #include "hw/boards.h"
-#include "hw/qdev-properties.h"
 #include "monitor/monitor.h"
 #include "net/announce.h"
-#include "qemu/queue.h"
 
 #define MAX_THROTTLE  (32 << 20)      /* Migration transfer speed throttling */
 
@@ -820,31 +815,11 @@ bool migration_is_setup_or_active(int state)
     case MIGRATION_STATUS_SETUP:
     case MIGRATION_STATUS_PRE_SWITCHOVER:
     case MIGRATION_STATUS_DEVICE:
-    case MIGRATION_STATUS_WAIT_UNPLUG:
         return true;
 
     default:
         return false;
 
-    }
-}
-
-static void populate_time_info(MigrationInfo *info, MigrationState *s)
-{
-    info->has_status = true;
-    info->has_setup_time = true;
-    info->setup_time = s->setup_time;
-    if (s->state == MIGRATION_STATUS_COMPLETED) {
-        info->has_total_time = true;
-        info->total_time = s->total_time;
-        info->has_downtime = true;
-        info->downtime = s->downtime;
-    } else {
-        info->has_total_time = true;
-        info->total_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME) -
-                           s->start_time;
-        info->has_expected_downtime = true;
-        info->expected_downtime = s->expected_downtime;
     }
 }
 
@@ -933,8 +908,16 @@ static void fill_source_migration_info(MigrationInfo *info)
     case MIGRATION_STATUS_DEVICE:
     case MIGRATION_STATUS_POSTCOPY_PAUSED:
     case MIGRATION_STATUS_POSTCOPY_RECOVER:
-        /* TODO add some postcopy stats */
-        populate_time_info(info, s);
+         /* TODO add some postcopy stats */
+        info->has_status = true;
+        info->has_total_time = true;
+        info->total_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME)
+            - s->start_time;
+        info->has_expected_downtime = true;
+        info->expected_downtime = s->expected_downtime;
+        info->has_setup_time = true;
+        info->setup_time = s->setup_time;
+
         populate_ram_info(info, s);
         populate_disk_info(info);
         break;
@@ -943,7 +926,14 @@ static void fill_source_migration_info(MigrationInfo *info)
         /* TODO: display COLO specific information (checkpoint info etc.) */
         break;
     case MIGRATION_STATUS_COMPLETED:
-        populate_time_info(info, s);
+        info->has_status = true;
+        info->has_total_time = true;
+        info->total_time = s->total_time;
+        info->has_downtime = true;
+        info->downtime = s->downtime;
+        info->has_setup_time = true;
+        info->setup_time = s->setup_time;
+
         populate_ram_info(info, s);
         break;
     case MIGRATION_STATUS_FAILED:
@@ -954,9 +944,6 @@ static void fill_source_migration_info(MigrationInfo *info)
         }
         break;
     case MIGRATION_STATUS_CANCELLED:
-        info->has_status = true;
-        break;
-    case MIGRATION_STATUS_WAIT_UNPLUG:
         info->has_status = true;
         break;
     }
@@ -1538,7 +1525,8 @@ static void migrate_fd_cleanup(MigrationState *s)
         qemu_fclose(tmp);
     }
 
-    assert(!migration_is_active(s));
+    assert((s->state != MIGRATION_STATUS_ACTIVE) &&
+           (s->state != MIGRATION_STATUS_POSTCOPY_ACTIVE));
 
     if (s->state == MIGRATION_STATUS_CANCELLING) {
         migrate_set_state(&s->state, MIGRATION_STATUS_CANCELLING,
@@ -1663,14 +1651,7 @@ bool migration_in_postcopy(void)
 {
     MigrationState *s = migrate_get_current();
 
-    switch (s->state) {
-    case MIGRATION_STATUS_POSTCOPY_ACTIVE:
-    case MIGRATION_STATUS_POSTCOPY_PAUSED:
-    case MIGRATION_STATUS_POSTCOPY_RECOVER:
-        return true;
-    default:
-        return false;
-    }
+    return (s->state == MIGRATION_STATUS_POSTCOPY_ACTIVE);
 }
 
 bool migration_in_postcopy_after_devices(MigrationState *s)
@@ -1699,19 +1680,12 @@ bool migration_is_idle(void)
     case MIGRATION_STATUS_COLO:
     case MIGRATION_STATUS_PRE_SWITCHOVER:
     case MIGRATION_STATUS_DEVICE:
-    case MIGRATION_STATUS_WAIT_UNPLUG:
         return false;
     case MIGRATION_STATUS__MAX:
         g_assert_not_reached();
     }
 
     return false;
-}
-
-bool migration_is_active(MigrationState *s)
-{
-    return (s->state == MIGRATION_STATUS_ACTIVE ||
-            s->state == MIGRATION_STATUS_POSTCOPY_ACTIVE);
 }
 
 void migrate_init(MigrationState *s)
@@ -1721,6 +1695,7 @@ void migrate_init(MigrationState *s)
      * parameters/capabilities that the user set, and
      * locks.
      */
+    s->bytes_xfer = 0;
     s->cleanup_bh = 0;
     s->to_dst_file = NULL;
     s->state = MIGRATION_STATUS_NONE;
@@ -1933,11 +1908,6 @@ static bool migrate_prepare(MigrationState *s, bool blk, bool blk_inc,
     }
 
     migrate_init(s);
-    /*
-     * set ram_counters memory to zero for a
-     * new migration
-     */
-    memset(&ram_counters, 0, sizeof(ram_counters));
 
     return true;
 }
@@ -2158,15 +2128,6 @@ bool migrate_ignore_shared(void)
     return s->enabled_capabilities[MIGRATION_CAPABILITY_X_IGNORE_SHARED];
 }
 
-bool migrate_validate_uuid(void)
-{
-    MigrationState *s;
-
-    s = migrate_get_current();
-
-    return s->enabled_capabilities[MIGRATION_CAPABILITY_VALIDATE_UUID];
-}
-
 bool migrate_use_events(void)
 {
     MigrationState *s;
@@ -2290,7 +2251,7 @@ static struct rp_cmd_args {
 static void migrate_handle_rp_req_pages(MigrationState *ms, const char* rbname,
                                        ram_addr_t start, size_t len)
 {
-    long our_host_ps = qemu_real_host_page_size;
+    long our_host_ps = getpagesize();
 
     trace_migrate_handle_rp_req_pages(rbname, start, len);
 
@@ -2492,7 +2453,7 @@ retry:
 out:
     res = qemu_file_get_error(rp);
     if (res) {
-        if (res == -EIO && migration_in_postcopy()) {
+        if (res == -EIO) {
             /*
              * Maybe there is something we can do: it looks like a
              * network down issue, and we pause for a recovery.
@@ -3002,7 +2963,6 @@ static MigThrError migration_detect_error(MigrationState *s)
 {
     int ret;
     int state = s->state;
-    Error *local_error = NULL;
 
     if (state == MIGRATION_STATUS_CANCELLING ||
         state == MIGRATION_STATUS_CANCELLED) {
@@ -3011,16 +2971,11 @@ static MigThrError migration_detect_error(MigrationState *s)
     }
 
     /* Try to detect any file errors */
-    ret = qemu_file_get_error_obj(s->to_dst_file, &local_error);
+    ret = qemu_file_get_error(s->to_dst_file);
+
     if (!ret) {
         /* Everything is fine */
-        assert(!local_error);
         return MIG_THR_ERR_NONE;
-    }
-
-    if (local_error) {
-        migrate_set_error(s, local_error);
-        error_free(local_error);
     }
 
     if (state == MIGRATION_STATUS_POSTCOPY_ACTIVE && ret == -EIO) {
@@ -3043,7 +2998,7 @@ static MigThrError migration_detect_error(MigrationState *s)
     }
 }
 
-/* How many bytes have we transferred since the beginning of the migration */
+/* How many bytes have we transferred since the beggining of the migration */
 static uint64_t migration_total_bytes(MigrationState *s)
 {
     return qemu_ftell(s->to_dst_file) + ram_counters.multifd_bytes;
@@ -3068,17 +3023,6 @@ static void migration_calculate_complete(MigrationState *s)
     if (transfer_time) {
         s->mbps = ((double) bytes * 8.0) / transfer_time / 1000;
     }
-}
-
-static void update_iteration_initial_status(MigrationState *s)
-{
-    /*
-     * Update these three fields at the same time to avoid mismatch info lead
-     * wrong speed calculation.
-     */
-    s->iteration_start_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
-    s->iteration_initial_bytes = migration_total_bytes(s);
-    s->iteration_initial_pages = ram_get_total_transferred_pages();
 }
 
 static void migration_update_counters(MigrationState *s,
@@ -3116,7 +3060,9 @@ static void migration_update_counters(MigrationState *s,
 
     qemu_file_reset_rate_limit(s->to_dst_file);
 
-    update_iteration_initial_status(s);
+    s->iteration_start_time = current_time;
+    s->iteration_initial_bytes = current_bytes;
+    s->iteration_initial_pages = ram_get_total_transferred_pages();
 
     trace_migrate_transferred(transferred, time_spent,
                               bandwidth, s->threshold_size);
@@ -3147,7 +3093,8 @@ static MigIterateState migration_iteration_run(MigrationState *s)
 
     if (pending_size && pending_size >= s->threshold_size) {
         /* Still a significant amount to transfer */
-        if (!in_postcopy && pend_pre <= s->threshold_size &&
+        if (migrate_postcopy() && !in_postcopy &&
+            pend_pre <= s->threshold_size &&
             atomic_read(&s->start_postcopy)) {
             if (postcopy_start(s)) {
                 error_report("%s: postcopy failed to start", __func__);
@@ -3155,7 +3102,8 @@ static MigIterateState migration_iteration_run(MigrationState *s)
             return MIG_ITERATE_SKIP;
         }
         /* Just another iteration step */
-        qemu_savevm_state_iterate(s->to_dst_file, in_postcopy);
+        qemu_savevm_state_iterate(s->to_dst_file,
+            s->state == MIGRATION_STATUS_POSTCOPY_ACTIVE);
     } else {
         trace_migration_thread_low_pending(pending_size);
         migration_completion(s);
@@ -3238,7 +3186,7 @@ static void *migration_thread(void *opaque)
     rcu_register_thread();
 
     object_ref(OBJECT(s));
-    update_iteration_initial_status(s);
+    s->iteration_start_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
 
     qemu_savevm_state_header(s->to_dst_file);
 
@@ -3270,26 +3218,14 @@ static void *migration_thread(void *opaque)
 
     qemu_savevm_state_setup(s->to_dst_file);
 
-    if (qemu_savevm_nr_failover_devices()) {
-        migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
-                          MIGRATION_STATUS_WAIT_UNPLUG);
-
-        while (s->state == MIGRATION_STATUS_WAIT_UNPLUG &&
-               qemu_savevm_state_guest_unplug_pending()) {
-            qemu_sem_timedwait(&s->wait_unplug_sem, 250);
-        }
-
-        migrate_set_state(&s->state, MIGRATION_STATUS_WAIT_UNPLUG,
-                MIGRATION_STATUS_ACTIVE);
-    }
-
     s->setup_time = qemu_clock_get_ms(QEMU_CLOCK_HOST) - setup_start;
     migrate_set_state(&s->state, MIGRATION_STATUS_SETUP,
                       MIGRATION_STATUS_ACTIVE);
 
     trace_migration_thread_setup_complete();
 
-    while (migration_is_active(s)) {
+    while (s->state == MIGRATION_STATUS_ACTIVE ||
+           s->state == MIGRATION_STATUS_POSTCOPY_ACTIVE) {
         int64_t current_time;
 
         if (urgent || !qemu_file_rate_limit(s->to_dst_file)) {
@@ -3315,7 +3251,8 @@ static void *migration_thread(void *opaque)
              * the local variables. This is important to avoid
              * breaking transferred_bytes and bandwidth calculation
              */
-            update_iteration_initial_status(s);
+            s->iteration_start_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+            s->iteration_initial_bytes = 0;
         }
 
         current_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
@@ -3365,8 +3302,7 @@ void migrate_fd_connect(MigrationState *s, Error *error_in)
 
     if (resume) {
         /* This is a resumed migration */
-        rate_limit = s->parameters.max_postcopy_bandwidth /
-            XFER_LIMIT_RATIO;
+        rate_limit = INT64_MAX;
     } else {
         /* This is a fresh new migration */
         rate_limit = s->parameters.max_bandwidth / XFER_LIMIT_RATIO;
@@ -3530,7 +3466,6 @@ static void migration_instance_finalize(Object *obj)
     qemu_mutex_destroy(&ms->qemu_file_lock);
     g_free(params->tls_hostname);
     g_free(params->tls_creds);
-    qemu_sem_destroy(&ms->wait_unplug_sem);
     qemu_sem_destroy(&ms->rate_limit_sem);
     qemu_sem_destroy(&ms->pause_sem);
     qemu_sem_destroy(&ms->postcopy_pause_sem);
@@ -3576,7 +3511,6 @@ static void migration_instance_init(Object *obj)
     qemu_sem_init(&ms->postcopy_pause_rp_sem, 0);
     qemu_sem_init(&ms->rp_state.rp_sem, 0);
     qemu_sem_init(&ms->rate_limit_sem, 0);
-    qemu_sem_init(&ms->wait_unplug_sem, 0);
     qemu_mutex_init(&ms->qemu_file_lock);
 }
 

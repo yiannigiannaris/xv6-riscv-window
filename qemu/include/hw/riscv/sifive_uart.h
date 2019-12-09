@@ -20,9 +20,6 @@
 #ifndef HW_SIFIVE_UART_H
 #define HW_SIFIVE_UART_H
 
-#include "chardev/char-fe.h"
-#include "hw/sysbus.h"
-
 enum {
     SIFIVE_UART_TXFIFO        = 0,
     SIFIVE_UART_RXFIFO        = 4,

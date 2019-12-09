@@ -25,6 +25,7 @@
 #ifndef QEMU_I8259_INTERNAL_H
 #define QEMU_I8259_INTERNAL_H
 
+#include "hw/hw.h"
 #include "hw/i386/pc.h"
 #include "hw/isa/isa.h"
 #include "hw/intc/intc.h"

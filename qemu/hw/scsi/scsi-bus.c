@@ -1,17 +1,14 @@
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/module.h"
 #include "qemu/option.h"
-#include "hw/qdev-properties.h"
 #include "hw/scsi/scsi.h"
-#include "migration/qemu-file-types.h"
-#include "migration/vmstate.h"
 #include "scsi/constants.h"
+#include "hw/qdev.h"
 #include "sysemu/block-backend.h"
 #include "sysemu/blockdev.h"
-#include "sysemu/sysemu.h"
-#include "sysemu/runstate.h"
 #include "trace.h"
 #include "sysemu/dma.h"
 #include "qemu/cutils.h"
@@ -56,14 +53,6 @@ static void scsi_device_realize(SCSIDevice *s, Error **errp)
     SCSIDeviceClass *sc = SCSI_DEVICE_GET_CLASS(s);
     if (sc->realize) {
         sc->realize(s, errp);
-    }
-}
-
-static void scsi_device_unrealize(SCSIDevice *s, Error **errp)
-{
-    SCSIDeviceClass *sc = SCSI_DEVICE_GET_CLASS(s);
-    if (sc->unrealize) {
-        sc->unrealize(s, errp);
     }
 }
 
@@ -225,20 +214,12 @@ static void scsi_qdev_realize(DeviceState *qdev, Error **errp)
 static void scsi_qdev_unrealize(DeviceState *qdev, Error **errp)
 {
     SCSIDevice *dev = SCSI_DEVICE(qdev);
-    Error *local_err = NULL;
 
     if (dev->vmsentry) {
         qemu_del_vm_change_state_handler(dev->vmsentry);
     }
 
     scsi_device_purge_requests(dev, SENSE_CODE(NO_SENSE));
-
-    scsi_device_unrealize(dev, &local_err);
-    if (local_err) {
-        error_propagate(errp, local_err);
-        return;
-    }
-
     blockdev_mark_auto_del(dev->conf.blk);
 }
 
@@ -254,18 +235,8 @@ SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockBackend *blk,
     char *name;
     DeviceState *dev;
     Error *err = NULL;
-    DriveInfo *dinfo;
 
-    if (blk_is_sg(blk)) {
-        driver = "scsi-generic";
-    } else {
-        dinfo = blk_legacy_dinfo(blk);
-        if (dinfo && dinfo->media_cd) {
-            driver = "scsi-cd";
-        } else {
-            driver = "scsi-hd";
-        }
-    }
+    driver = blk_is_sg(blk) ? "scsi-generic" : "scsi-disk";
     dev = qdev_create(&bus->qbus, driver);
     name = g_strdup_printf("legacy[%d]", unit);
     object_property_add_child(OBJECT(bus), name, OBJECT(dev), NULL);

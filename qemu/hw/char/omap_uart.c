@@ -19,6 +19,7 @@
  */
 #include "qemu/osdep.h"
 #include "chardev/char.h"
+#include "hw/hw.h"
 #include "hw/arm/omap.h"
 #include "hw/char/serial.h"
 #include "exec/address-spaces.h"

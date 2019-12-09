@@ -51,8 +51,6 @@ typedef struct MirrorBlockJob {
     Error *replace_blocker;
     bool is_none_mode;
     BlockMirrorBackingMode backing_mode;
-    /* Whether the target image requires explicit zero-initialization */
-    bool zero_target;
     MirrorCopyMode copy_mode;
     BlockdevOnError on_source_error, on_target_error;
     bool synced;
@@ -478,7 +476,7 @@ static uint64_t coroutine_fn mirror_iteration(MirrorBlockJob *s)
         int64_t next_offset = offset + nb_chunks * s->granularity;
         int64_t next_chunk = next_offset / s->granularity;
         if (next_offset >= s->bdev_length ||
-            !bdrv_dirty_bitmap_get_locked(s->dirty_bitmap, next_offset)) {
+            !bdrv_get_dirty_locked(source, s->dirty_bitmap, next_offset)) {
             break;
         }
         if (test_bit(next_chunk, s->in_flight_bitmap)) {
@@ -643,7 +641,7 @@ static int mirror_exit_common(Job *job)
         bdrv_unfreeze_backing_chain(mirror_top_bs, target_bs);
     }
 
-    bdrv_release_dirty_bitmap(s->dirty_bitmap);
+    bdrv_release_dirty_bitmap(src, s->dirty_bitmap);
 
     /* Make sure that the source BDS doesn't go away during bdrv_replace_node,
      * before we can call bdrv_drained_end */
@@ -651,11 +649,14 @@ static int mirror_exit_common(Job *job)
     bdrv_ref(mirror_top_bs);
     bdrv_ref(target_bs);
 
-    /*
-     * Remove target parent that still uses BLK_PERM_WRITE/RESIZE before
+    /* Remove target parent that still uses BLK_PERM_WRITE/RESIZE before
      * inserting target_bs at s->to_replace, where we might not be able to get
      * these permissions.
-     */
+     *
+     * Note that blk_unref() alone doesn't necessarily drop permissions because
+     * we might be running nested inside mirror_drain(), which takes an extra
+     * reference, so use an explicit blk_set_perm() first. */
+    blk_set_perm(s->target, 0, BLK_PERM_ALL, &error_abort);
     blk_unref(s->target);
     s->target = NULL;
 
@@ -771,7 +772,7 @@ static int coroutine_fn mirror_dirty_init(MirrorBlockJob *s)
     int ret;
     int64_t count;
 
-    if (s->zero_target) {
+    if (base == NULL && !bdrv_has_zero_init(target_bs)) {
         if (!bdrv_can_write_zeroes_with_unmap(target_bs)) {
             bdrv_set_dirty_bitmap(s->dirty_bitmap, 0, s->bdev_length);
             return 0;
@@ -878,8 +879,8 @@ static int coroutine_fn mirror_run(Job *job, Error **errp)
         }
 
         if (s->bdev_length > base_length) {
-            ret = blk_truncate(s->target, s->bdev_length, false,
-                               PREALLOC_MODE_OFF, NULL);
+            ret = blk_truncate(s->target, s->bdev_length, PREALLOC_MODE_OFF,
+                               NULL);
             if (ret < 0) {
                 goto immediate_exit;
             }
@@ -1151,12 +1152,28 @@ static bool mirror_drained_poll(BlockJob *job)
     return !!s->in_flight;
 }
 
+static void mirror_drain(BlockJob *job)
+{
+    MirrorBlockJob *s = container_of(job, MirrorBlockJob, common);
+
+    /* Need to keep a reference in case blk_drain triggers execution
+     * of mirror_complete...
+     */
+    if (s->target) {
+        BlockBackend *target = s->target;
+        blk_ref(target);
+        blk_drain(target);
+        blk_unref(target);
+    }
+}
+
 static const BlockJobDriver mirror_job_driver = {
     .job_driver = {
         .instance_size          = sizeof(MirrorBlockJob),
         .job_type               = JOB_TYPE_MIRROR,
         .free                   = block_job_free,
         .user_resume            = block_job_user_resume,
+        .drain                  = block_job_drain,
         .run                    = mirror_run,
         .prepare                = mirror_prepare,
         .abort                  = mirror_abort,
@@ -1164,6 +1181,7 @@ static const BlockJobDriver mirror_job_driver = {
         .complete               = mirror_complete,
     },
     .drained_poll           = mirror_drained_poll,
+    .drain                  = mirror_drain,
 };
 
 static const BlockJobDriver commit_active_job_driver = {
@@ -1172,6 +1190,7 @@ static const BlockJobDriver commit_active_job_driver = {
         .job_type               = JOB_TYPE_COMMIT,
         .free                   = block_job_free,
         .user_resume            = block_job_user_resume,
+        .drain                  = block_job_drain,
         .run                    = mirror_run,
         .prepare                = mirror_prepare,
         .abort                  = mirror_abort,
@@ -1179,6 +1198,7 @@ static const BlockJobDriver commit_active_job_driver = {
         .complete               = mirror_complete,
     },
     .drained_poll           = mirror_drained_poll,
+    .drain                  = mirror_drain,
 };
 
 static void coroutine_fn
@@ -1186,107 +1206,84 @@ do_sync_target_write(MirrorBlockJob *job, MirrorMethod method,
                      uint64_t offset, uint64_t bytes,
                      QEMUIOVector *qiov, int flags)
 {
-    int ret;
-    size_t qiov_offset = 0;
-    int64_t bitmap_offset, bitmap_end;
+    QEMUIOVector target_qiov;
+    uint64_t dirty_offset = offset;
+    uint64_t dirty_bytes;
 
-    if (!QEMU_IS_ALIGNED(offset, job->granularity) &&
-        bdrv_dirty_bitmap_get(job->dirty_bitmap, offset))
-    {
-            /*
-             * Dirty unaligned padding: ignore it.
-             *
-             * Reasoning:
-             * 1. If we copy it, we can't reset corresponding bit in
-             *    dirty_bitmap as there may be some "dirty" bytes still not
-             *    copied.
-             * 2. It's already dirty, so skipping it we don't diverge mirror
-             *    progress.
-             *
-             * Note, that because of this, guest write may have no contribution
-             * into mirror converge, but that's not bad, as we have background
-             * process of mirroring. If under some bad circumstances (high guest
-             * IO load) background process starve, we will not converge anyway,
-             * even if each write will contribute, as guest is not guaranteed to
-             * rewrite the whole disk.
-             */
-            qiov_offset = QEMU_ALIGN_UP(offset, job->granularity) - offset;
-            if (bytes <= qiov_offset) {
-                /* nothing to do after shrink */
-                return;
-            }
-            offset += qiov_offset;
-            bytes -= qiov_offset;
+    if (qiov) {
+        qemu_iovec_init(&target_qiov, qiov->niov);
     }
 
-    if (!QEMU_IS_ALIGNED(offset + bytes, job->granularity) &&
-        bdrv_dirty_bitmap_get(job->dirty_bitmap, offset + bytes - 1))
-    {
-        uint64_t tail = (offset + bytes) % job->granularity;
+    while (true) {
+        bool valid_area;
+        int ret;
 
-        if (bytes <= tail) {
-            /* nothing to do after shrink */
-            return;
+        bdrv_dirty_bitmap_lock(job->dirty_bitmap);
+        dirty_bytes = MIN(offset + bytes - dirty_offset, INT_MAX);
+        valid_area = bdrv_dirty_bitmap_next_dirty_area(job->dirty_bitmap,
+                                                       &dirty_offset,
+                                                       &dirty_bytes);
+        if (!valid_area) {
+            bdrv_dirty_bitmap_unlock(job->dirty_bitmap);
+            break;
         }
-        bytes -= tail;
-    }
 
-    /*
-     * Tails are either clean or shrunk, so for bitmap resetting
-     * we safely align the range down.
-     */
-    bitmap_offset = QEMU_ALIGN_UP(offset, job->granularity);
-    bitmap_end = QEMU_ALIGN_DOWN(offset + bytes, job->granularity);
-    if (bitmap_offset < bitmap_end) {
-        bdrv_reset_dirty_bitmap(job->dirty_bitmap, bitmap_offset,
-                                bitmap_end - bitmap_offset);
-    }
+        bdrv_reset_dirty_bitmap_locked(job->dirty_bitmap,
+                                       dirty_offset, dirty_bytes);
+        bdrv_dirty_bitmap_unlock(job->dirty_bitmap);
 
-    job_progress_increase_remaining(&job->common.job, bytes);
+        job_progress_increase_remaining(&job->common.job, dirty_bytes);
 
-    switch (method) {
-    case MIRROR_METHOD_COPY:
-        ret = blk_co_pwritev_part(job->target, offset, bytes,
-                                  qiov, qiov_offset, flags);
-        break;
+        assert(dirty_offset - offset <= SIZE_MAX);
+        if (qiov) {
+            qemu_iovec_reset(&target_qiov);
+            qemu_iovec_concat(&target_qiov, qiov,
+                              dirty_offset - offset, dirty_bytes);
+        }
 
-    case MIRROR_METHOD_ZERO:
-        assert(!qiov);
-        ret = blk_co_pwrite_zeroes(job->target, offset, bytes, flags);
-        break;
+        switch (method) {
+        case MIRROR_METHOD_COPY:
+            ret = blk_co_pwritev(job->target, dirty_offset, dirty_bytes,
+                                 qiov ? &target_qiov : NULL, flags);
+            break;
 
-    case MIRROR_METHOD_DISCARD:
-        assert(!qiov);
-        ret = blk_co_pdiscard(job->target, offset, bytes);
-        break;
+        case MIRROR_METHOD_ZERO:
+            assert(!qiov);
+            ret = blk_co_pwrite_zeroes(job->target, dirty_offset, dirty_bytes,
+                                       flags);
+            break;
 
-    default:
-        abort();
-    }
+        case MIRROR_METHOD_DISCARD:
+            assert(!qiov);
+            ret = blk_co_pdiscard(job->target, dirty_offset, dirty_bytes);
+            break;
 
-    if (ret >= 0) {
-        job_progress_update(&job->common.job, bytes);
-    } else {
-        BlockErrorAction action;
+        default:
+            abort();
+        }
 
-        /*
-         * We failed, so we should mark dirty the whole area, aligned up.
-         * Note that we don't care about shrunk tails if any: they were dirty
-         * at function start, and they must be still dirty, as we've locked
-         * the region for in-flight op.
-         */
-        bitmap_offset = QEMU_ALIGN_DOWN(offset, job->granularity);
-        bitmap_end = QEMU_ALIGN_UP(offset + bytes, job->granularity);
-        bdrv_set_dirty_bitmap(job->dirty_bitmap, bitmap_offset,
-                              bitmap_end - bitmap_offset);
-        job->actively_synced = false;
+        if (ret >= 0) {
+            job_progress_update(&job->common.job, dirty_bytes);
+        } else {
+            BlockErrorAction action;
 
-        action = mirror_error_action(job, false, -ret);
-        if (action == BLOCK_ERROR_ACTION_REPORT) {
-            if (!job->ret) {
-                job->ret = ret;
+            bdrv_set_dirty_bitmap(job->dirty_bitmap, dirty_offset, dirty_bytes);
+            job->actively_synced = false;
+
+            action = mirror_error_action(job, false, -ret);
+            if (action == BLOCK_ERROR_ACTION_REPORT) {
+                if (!job->ret) {
+                    job->ret = ret;
+                }
+                break;
             }
         }
+
+        dirty_offset += dirty_bytes;
+    }
+
+    if (qiov) {
+        qemu_iovec_destroy(&target_qiov);
     }
 }
 
@@ -1493,6 +1490,15 @@ static void bdrv_mirror_top_child_perm(BlockDriverState *bs, BdrvChild *c,
     *nshared = BLK_PERM_ALL;
 }
 
+static void bdrv_mirror_top_refresh_limits(BlockDriverState *bs, Error **errp)
+{
+    MirrorBDSOpaque *s = bs->opaque;
+
+    if (s && s->job && s->job->copy_mode == MIRROR_COPY_MODE_WRITE_BLOCKING) {
+        bs->bl.request_alignment = s->job->granularity;
+    }
+}
+
 /* Dummy node that provides consistent read to its users without requiring it
  * from its backing file and that allows writes on the backing file chain. */
 static BlockDriver bdrv_mirror_top = {
@@ -1505,6 +1511,7 @@ static BlockDriver bdrv_mirror_top = {
     .bdrv_co_block_status       = bdrv_co_block_status_from_backing,
     .bdrv_refresh_filename      = bdrv_mirror_top_refresh_filename,
     .bdrv_child_perm            = bdrv_mirror_top_child_perm,
+    .bdrv_refresh_limits        = bdrv_mirror_top_refresh_limits,
 };
 
 static BlockJob *mirror_start_job(
@@ -1513,7 +1520,6 @@ static BlockJob *mirror_start_job(
                              const char *replaces, int64_t speed,
                              uint32_t granularity, int64_t buf_size,
                              BlockMirrorBackingMode backing_mode,
-                             bool zero_target,
                              BlockdevOnError on_source_error,
                              BlockdevOnError on_target_error,
                              bool unmap,
@@ -1635,14 +1641,12 @@ static BlockJob *mirror_start_job(
         blk_set_force_allow_inactivate(s->target);
     }
     blk_set_allow_aio_context_change(s->target, true);
-    blk_set_disable_request_queuing(s->target, true);
 
     s->replaces = g_strdup(replaces);
     s->on_source_error = on_source_error;
     s->on_target_error = on_target_error;
     s->is_none_mode = is_none_mode;
     s->backing_mode = backing_mode;
-    s->zero_target = zero_target;
     s->copy_mode = copy_mode;
     s->base = base;
     s->granularity = granularity;
@@ -1652,12 +1656,28 @@ static BlockJob *mirror_start_job(
         s->should_complete = true;
     }
 
+    /*
+     * Must be called before we start tracking writes, but after
+     *
+     *     ((MirrorBlockJob *)
+     *         ((MirrorBDSOpaque *)
+     *             mirror_top_bs->opaque
+     *         )->job
+     *     )->copy_mode
+     *
+     * has the correct value.
+     * (We start tracking writes as of the following
+     * bdrv_create_dirty_bitmap() call.)
+     */
+    bdrv_refresh_limits(mirror_top_bs, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        goto fail;
+    }
+
     s->dirty_bitmap = bdrv_create_dirty_bitmap(bs, granularity, NULL, errp);
     if (!s->dirty_bitmap) {
         goto fail;
-    }
-    if (s->copy_mode == MIRROR_COPY_MODE_WRITE_BLOCKING) {
-        bdrv_disable_dirty_bitmap(s->dirty_bitmap);
     }
 
     ret = block_job_add_bdrv(&s->common, "source", bs, 0,
@@ -1711,7 +1731,7 @@ fail:
         blk_unref(s->target);
         bs_opaque->job = NULL;
         if (s->dirty_bitmap) {
-            bdrv_release_dirty_bitmap(s->dirty_bitmap);
+            bdrv_release_dirty_bitmap(bs, s->dirty_bitmap);
         }
         job_early_fail(&s->common.job);
     }
@@ -1731,7 +1751,6 @@ void mirror_start(const char *job_id, BlockDriverState *bs,
                   int creation_flags, int64_t speed,
                   uint32_t granularity, int64_t buf_size,
                   MirrorSyncMode mode, BlockMirrorBackingMode backing_mode,
-                  bool zero_target,
                   BlockdevOnError on_source_error,
                   BlockdevOnError on_target_error,
                   bool unmap, const char *filter_node_name,
@@ -1740,16 +1759,14 @@ void mirror_start(const char *job_id, BlockDriverState *bs,
     bool is_none_mode;
     BlockDriverState *base;
 
-    if ((mode == MIRROR_SYNC_MODE_INCREMENTAL) ||
-        (mode == MIRROR_SYNC_MODE_BITMAP)) {
-        error_setg(errp, "Sync mode '%s' not supported",
-                   MirrorSyncMode_str(mode));
+    if (mode == MIRROR_SYNC_MODE_INCREMENTAL) {
+        error_setg(errp, "Sync mode 'incremental' not supported");
         return;
     }
     is_none_mode = mode == MIRROR_SYNC_MODE_NONE;
     base = mode == MIRROR_SYNC_MODE_TOP ? backing_bs(bs) : NULL;
     mirror_start_job(job_id, bs, creation_flags, target, replaces,
-                     speed, granularity, buf_size, backing_mode, zero_target,
+                     speed, granularity, buf_size, backing_mode,
                      on_source_error, on_target_error, unmap, NULL, NULL,
                      &mirror_job_driver, is_none_mode, base, false,
                      filter_node_name, true, copy_mode, errp);
@@ -1776,7 +1793,7 @@ BlockJob *commit_active_start(const char *job_id, BlockDriverState *bs,
 
     ret = mirror_start_job(
                      job_id, bs, creation_flags, base, NULL, speed, 0, 0,
-                     MIRROR_LEAVE_BACKING_CHAIN, false,
+                     MIRROR_LEAVE_BACKING_CHAIN,
                      on_error, on_error, true, cb, opaque,
                      &commit_active_job_driver, false, base, auto_complete,
                      filter_node_name, false, MIRROR_COPY_MODE_BACKGROUND,

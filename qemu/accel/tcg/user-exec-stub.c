@@ -1,5 +1,5 @@
 #include "qemu/osdep.h"
-#include "hw/core/cpu.h"
+#include "qom/cpu.h"
 #include "sysemu/replay.h"
 #include "sysemu/sysemu.h"
 

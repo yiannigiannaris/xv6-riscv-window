@@ -15,7 +15,6 @@
 #include "qemu/error-report.h"
 #include "qemu/module.h"
 #include "trace.h"
-#include "hw/qdev-properties.h"
 #include "hw/virtio/virtio-serial.h"
 #include "qapi/error.h"
 #include "qapi/qapi-events-char.h"

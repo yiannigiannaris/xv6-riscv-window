@@ -882,13 +882,7 @@ static void curl_setup_preadv(BlockDriverState *bs, CURLAIOCB *acb)
     trace_curl_setup_preadv(acb->bytes, start, state->range);
     curl_easy_setopt(state->curl, CURLOPT_RANGE, state->range);
 
-    if (curl_multi_add_handle(s->multi, state->curl) != CURLM_OK) {
-        state->acb[0] = NULL;
-        acb->ret = -EIO;
-
-        curl_clean_state(state);
-        goto out;
-    }
+    curl_multi_add_handle(s->multi, state->curl);
 
     /* Tell curl it needs to kick things off */
     curl_multi_socket_action(s->multi, CURL_SOCKET_TIMEOUT, 0, &running);

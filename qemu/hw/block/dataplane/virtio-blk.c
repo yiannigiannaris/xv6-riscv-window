@@ -16,7 +16,6 @@
 #include "qapi/error.h"
 #include "trace.h"
 #include "qemu/iov.h"
-#include "qemu/main-loop.h"
 #include "qemu/thread.h"
 #include "qemu/error-report.h"
 #include "hw/virtio/virtio-access.h"

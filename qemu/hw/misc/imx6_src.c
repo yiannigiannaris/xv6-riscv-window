@@ -10,13 +10,12 @@
 
 #include "qemu/osdep.h"
 #include "hw/misc/imx6_src.h"
-#include "migration/vmstate.h"
+#include "sysemu/sysemu.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
-#include "qemu/main-loop.h"
 #include "qemu/module.h"
 #include "arm-powerctl.h"
-#include "hw/core/cpu.h"
+#include "qom/cpu.h"
 
 #ifndef DEBUG_IMX6_SRC
 #define DEBUG_IMX6_SRC 0

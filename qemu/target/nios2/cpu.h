@@ -22,7 +22,7 @@
 #define NIOS2_CPU_H
 
 #include "exec/cpu-defs.h"
-#include "hw/core/cpu.h"
+#include "qom/cpu.h"
 
 typedef struct CPUNios2State CPUNios2State;
 #if !defined(CONFIG_USER_ONLY)

@@ -1,7 +1,6 @@
 /*
  * QEMU Block driver for  NBD
  *
- * Copyright (c) 2019 Virtuozzo International GmbH.
  * Copyright (C) 2016 Red Hat, Inc.
  * Copyright (C) 2008 Bull S.A.S.
  *     Author: Laurent Vivier <Laurent.Vivier@bull.net>
@@ -34,7 +33,6 @@
 #include "qemu/uri.h"
 #include "qemu/option.h"
 #include "qemu/cutils.h"
-#include "qemu/main-loop.h"
 
 #include "qapi/qapi-visit-sockets.h"
 #include "qapi/qmp/qstring.h"
@@ -55,13 +53,6 @@ typedef struct {
     bool receiving;         /* waiting for connection_co? */
 } NBDClientRequest;
 
-typedef enum NBDClientState {
-    NBD_CLIENT_CONNECTING_WAIT,
-    NBD_CLIENT_CONNECTING_NOWAIT,
-    NBD_CLIENT_CONNECTED,
-    NBD_CLIENT_QUIT
-} NBDClientState;
-
 typedef struct BDRVNBDState {
     QIOChannelSocket *sioc; /* The master data channel */
     QIOChannel *ioc; /* The current I/O channel which may differ (eg TLS) */
@@ -70,44 +61,17 @@ typedef struct BDRVNBDState {
     CoMutex send_mutex;
     CoQueue free_sema;
     Coroutine *connection_co;
-    QemuCoSleepState *connection_co_sleep_ns_state;
-    bool drained;
-    bool wait_drained_end;
     int in_flight;
-    NBDClientState state;
-    int connect_status;
-    Error *connect_err;
-    bool wait_in_flight;
 
     NBDClientRequest requests[MAX_NBD_REQUESTS];
     NBDReply reply;
     BlockDriverState *bs;
+    bool quit;
 
-    /* Connection parameters */
-    uint32_t reconnect_delay;
+    /* For nbd_refresh_filename() */
     SocketAddress *saddr;
     char *export, *tlscredsid;
-    QCryptoTLSCreds *tlscreds;
-    const char *hostname;
-    char *x_dirty_bitmap;
 } BDRVNBDState;
-
-static int nbd_client_connect(BlockDriverState *bs, Error **errp);
-
-static void nbd_channel_error(BDRVNBDState *s, int ret)
-{
-    if (ret == -EIO) {
-        if (s->state == NBD_CLIENT_CONNECTED) {
-            s->state = s->reconnect_delay ? NBD_CLIENT_CONNECTING_WAIT :
-                                            NBD_CLIENT_CONNECTING_NOWAIT;
-        }
-    } else {
-        if (s->state == NBD_CLIENT_CONNECTED) {
-            qio_channel_shutdown(s->ioc, QIO_CHANNEL_SHUTDOWN_BOTH, NULL);
-        }
-        s->state = NBD_CLIENT_QUIT;
-    }
-}
 
 static void nbd_recv_coroutines_wake_all(BDRVNBDState *s)
 {
@@ -149,13 +113,7 @@ static void nbd_client_attach_aio_context(BlockDriverState *bs,
 {
     BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
 
-    /*
-     * s->connection_co is either yielded from nbd_receive_reply or from
-     * nbd_co_reconnect_loop()
-     */
-    if (s->state == NBD_CLIENT_CONNECTED) {
-        qio_channel_attach_aio_context(QIO_CHANNEL(s->ioc), new_context);
-    }
+    qio_channel_attach_aio_context(QIO_CHANNEL(s->ioc), new_context);
 
     bdrv_inc_in_flight(bs);
 
@@ -166,150 +124,24 @@ static void nbd_client_attach_aio_context(BlockDriverState *bs,
     aio_wait_bh_oneshot(new_context, nbd_client_attach_aio_context_bh, bs);
 }
 
-static void coroutine_fn nbd_client_co_drain_begin(BlockDriverState *bs)
-{
-    BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
-
-    s->drained = true;
-    if (s->connection_co_sleep_ns_state) {
-        qemu_co_sleep_wake(s->connection_co_sleep_ns_state);
-    }
-}
-
-static void coroutine_fn nbd_client_co_drain_end(BlockDriverState *bs)
-{
-    BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
-
-    s->drained = false;
-    if (s->wait_drained_end) {
-        s->wait_drained_end = false;
-        aio_co_wake(s->connection_co);
-    }
-}
-
 
 static void nbd_teardown_connection(BlockDriverState *bs)
 {
     BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
 
-    if (s->state == NBD_CLIENT_CONNECTED) {
-        /* finish any pending coroutines */
-        assert(s->ioc);
-        qio_channel_shutdown(s->ioc, QIO_CHANNEL_SHUTDOWN_BOTH, NULL);
-    }
-    s->state = NBD_CLIENT_QUIT;
-    if (s->connection_co) {
-        if (s->connection_co_sleep_ns_state) {
-            qemu_co_sleep_wake(s->connection_co_sleep_ns_state);
-        }
-    }
+    assert(s->ioc);
+
+    /* finish any pending coroutines */
+    qio_channel_shutdown(s->ioc,
+                         QIO_CHANNEL_SHUTDOWN_BOTH,
+                         NULL);
     BDRV_POLL_WHILE(bs, s->connection_co);
-}
 
-static bool nbd_client_connecting(BDRVNBDState *s)
-{
-    return s->state == NBD_CLIENT_CONNECTING_WAIT ||
-        s->state == NBD_CLIENT_CONNECTING_NOWAIT;
-}
-
-static bool nbd_client_connecting_wait(BDRVNBDState *s)
-{
-    return s->state == NBD_CLIENT_CONNECTING_WAIT;
-}
-
-static coroutine_fn void nbd_reconnect_attempt(BDRVNBDState *s)
-{
-    Error *local_err = NULL;
-
-    if (!nbd_client_connecting(s)) {
-        return;
-    }
-
-    /* Wait for completion of all in-flight requests */
-
-    qemu_co_mutex_lock(&s->send_mutex);
-
-    while (s->in_flight > 0) {
-        qemu_co_mutex_unlock(&s->send_mutex);
-        nbd_recv_coroutines_wake_all(s);
-        s->wait_in_flight = true;
-        qemu_coroutine_yield();
-        s->wait_in_flight = false;
-        qemu_co_mutex_lock(&s->send_mutex);
-    }
-
-    qemu_co_mutex_unlock(&s->send_mutex);
-
-    if (!nbd_client_connecting(s)) {
-        return;
-    }
-
-    /*
-     * Now we are sure that nobody is accessing the channel, and no one will
-     * try until we set the state to CONNECTED.
-     */
-
-    /* Finalize previous connection if any */
-    if (s->ioc) {
-        nbd_client_detach_aio_context(s->bs);
-        object_unref(OBJECT(s->sioc));
-        s->sioc = NULL;
-        object_unref(OBJECT(s->ioc));
-        s->ioc = NULL;
-    }
-
-    s->connect_status = nbd_client_connect(s->bs, &local_err);
-    error_free(s->connect_err);
-    s->connect_err = NULL;
-    error_propagate(&s->connect_err, local_err);
-
-    if (s->connect_status < 0) {
-        /* failed attempt */
-        return;
-    }
-
-    /* successfully connected */
-    s->state = NBD_CLIENT_CONNECTED;
-    qemu_co_queue_restart_all(&s->free_sema);
-}
-
-static coroutine_fn void nbd_co_reconnect_loop(BDRVNBDState *s)
-{
-    uint64_t start_time_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
-    uint64_t delay_ns = s->reconnect_delay * NANOSECONDS_PER_SECOND;
-    uint64_t timeout = 1 * NANOSECONDS_PER_SECOND;
-    uint64_t max_timeout = 16 * NANOSECONDS_PER_SECOND;
-
-    nbd_reconnect_attempt(s);
-
-    while (nbd_client_connecting(s)) {
-        if (s->state == NBD_CLIENT_CONNECTING_WAIT &&
-            qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - start_time_ns > delay_ns)
-        {
-            s->state = NBD_CLIENT_CONNECTING_NOWAIT;
-            qemu_co_queue_restart_all(&s->free_sema);
-        }
-
-        qemu_co_sleep_ns_wakeable(QEMU_CLOCK_REALTIME, timeout,
-                                  &s->connection_co_sleep_ns_state);
-        if (s->drained) {
-            bdrv_dec_in_flight(s->bs);
-            s->wait_drained_end = true;
-            while (s->drained) {
-                /*
-                 * We may be entered once from nbd_client_attach_aio_context_bh
-                 * and then from nbd_client_co_drain_end. So here is a loop.
-                 */
-                qemu_coroutine_yield();
-            }
-            bdrv_inc_in_flight(s->bs);
-        }
-        if (timeout < max_timeout) {
-            timeout *= 2;
-        }
-
-        nbd_reconnect_attempt(s);
-    }
+    nbd_client_detach_aio_context(bs);
+    object_unref(OBJECT(s->sioc));
+    s->sioc = NULL;
+    object_unref(OBJECT(s->ioc));
+    s->ioc = NULL;
 }
 
 static coroutine_fn void nbd_connection_entry(void *opaque)
@@ -319,7 +151,7 @@ static coroutine_fn void nbd_connection_entry(void *opaque)
     int ret = 0;
     Error *local_err = NULL;
 
-    while (s->state != NBD_CLIENT_QUIT) {
+    while (!s->quit) {
         /*
          * The NBD client can only really be considered idle when it has
          * yielded from qio_channel_readv_all_eof(), waiting for data. This is
@@ -329,26 +161,15 @@ static coroutine_fn void nbd_connection_entry(void *opaque)
          * Therefore we keep an additional in_flight reference all the time and
          * only drop it temporarily here.
          */
-
-        if (nbd_client_connecting(s)) {
-            nbd_co_reconnect_loop(s);
-        }
-
-        if (s->state != NBD_CLIENT_CONNECTED) {
-            continue;
-        }
-
         assert(s->reply.handle == 0);
         ret = nbd_receive_reply(s->bs, s->ioc, &s->reply, &local_err);
 
         if (local_err) {
             trace_nbd_read_reply_entry_fail(ret, error_get_pretty(local_err));
             error_free(local_err);
-            local_err = NULL;
         }
         if (ret <= 0) {
-            nbd_channel_error(s, ret ? ret : -EIO);
-            continue;
+            break;
         }
 
         /*
@@ -362,8 +183,7 @@ static coroutine_fn void nbd_connection_entry(void *opaque)
             !s->requests[i].receiving ||
             (nbd_reply_is_structured(&s->reply) && !s->info.structured_reply))
         {
-            nbd_channel_error(s, -EINVAL);
-            continue;
+            break;
         }
 
         /*
@@ -382,19 +202,11 @@ static coroutine_fn void nbd_connection_entry(void *opaque)
         qemu_coroutine_yield();
     }
 
-    qemu_co_queue_restart_all(&s->free_sema);
+    s->quit = true;
     nbd_recv_coroutines_wake_all(s);
     bdrv_dec_in_flight(s->bs);
 
     s->connection_co = NULL;
-    if (s->ioc) {
-        nbd_client_detach_aio_context(s->bs);
-        object_unref(OBJECT(s->sioc));
-        s->sioc = NULL;
-        object_unref(OBJECT(s->ioc));
-        s->ioc = NULL;
-    }
-
     aio_wait_kick();
 }
 
@@ -403,18 +215,12 @@ static int nbd_co_send_request(BlockDriverState *bs,
                                QEMUIOVector *qiov)
 {
     BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
-    int rc, i = -1;
+    int rc, i;
 
     qemu_co_mutex_lock(&s->send_mutex);
-    while (s->in_flight == MAX_NBD_REQUESTS || nbd_client_connecting_wait(s)) {
+    while (s->in_flight == MAX_NBD_REQUESTS) {
         qemu_co_queue_wait(&s->free_sema, &s->send_mutex);
     }
-
-    if (s->state != NBD_CLIENT_CONNECTED) {
-        rc = -EIO;
-        goto err;
-    }
-
     s->in_flight++;
 
     for (i = 0; i < MAX_NBD_REQUESTS; i++) {
@@ -432,12 +238,16 @@ static int nbd_co_send_request(BlockDriverState *bs,
 
     request->handle = INDEX_TO_HANDLE(s, i);
 
+    if (s->quit) {
+        rc = -EIO;
+        goto err;
+    }
     assert(s->ioc);
 
     if (qiov) {
         qio_channel_set_cork(s->ioc, true);
         rc = nbd_send_request(s->ioc, request);
-        if (rc >= 0 && s->state == NBD_CLIENT_CONNECTED) {
+        if (rc >= 0 && !s->quit) {
             if (qio_channel_writev_all(s->ioc, qiov->iov, qiov->niov,
                                        NULL) < 0) {
                 rc = -EIO;
@@ -452,16 +262,10 @@ static int nbd_co_send_request(BlockDriverState *bs,
 
 err:
     if (rc < 0) {
-        nbd_channel_error(s, rc);
-        if (i != -1) {
-            s->requests[i].coroutine = NULL;
-            s->in_flight--;
-        }
-        if (s->in_flight == 0 && s->wait_in_flight) {
-            aio_co_wake(s->connection_co);
-        } else {
-            qemu_co_queue_next(&s->free_sema);
-        }
+        s->quit = true;
+        s->requests[i].coroutine = NULL;
+        s->in_flight--;
+        qemu_co_queue_next(&s->free_sema);
     }
     qemu_co_mutex_unlock(&s->send_mutex);
     return rc;
@@ -752,7 +556,7 @@ static coroutine_fn int nbd_co_do_receive_one_chunk(
     s->requests[i].receiving = true;
     qemu_coroutine_yield();
     s->requests[i].receiving = false;
-    if (s->state != NBD_CLIENT_CONNECTED) {
+    if (s->quit) {
         error_setg(errp, "Connection closed");
         return -EIO;
     }
@@ -837,19 +641,14 @@ static coroutine_fn int nbd_co_receive_one_chunk(
 
     if (ret < 0) {
         memset(reply, 0, sizeof(*reply));
-        nbd_channel_error(s, ret);
+        s->quit = true;
     } else {
         /* For assert at loop start in nbd_connection_entry */
         *reply = s->reply;
+        s->reply.handle = 0;
     }
-    s->reply.handle = 0;
 
-    if (s->connection_co && !s->wait_in_flight) {
-        /*
-         * We must check s->wait_in_flight, because we may entered by
-         * nbd_recv_coroutines_wake_all(), in this case we should not
-         * wake connection_co here, it will woken by last request.
-         */
+    if (s->connection_co) {
         aio_co_wake(s->connection_co);
     }
 
@@ -910,7 +709,7 @@ static bool nbd_reply_chunk_iter_receive(BDRVNBDState *s,
     NBDReply local_reply;
     NBDStructuredReplyChunk *chunk;
     Error *local_err = NULL;
-    if (s->state != NBD_CLIENT_CONNECTED) {
+    if (s->quit) {
         error_setg(&local_err, "Connection closed");
         nbd_iter_channel_error(iter, -EIO, &local_err);
         goto break_loop;
@@ -935,7 +734,7 @@ static bool nbd_reply_chunk_iter_receive(BDRVNBDState *s,
     }
 
     /* Do not execute the body of NBD_FOREACH_REPLY_CHUNK for simple reply. */
-    if (nbd_reply_is_simple(reply) || s->state != NBD_CLIENT_CONNECTED) {
+    if (nbd_reply_is_simple(reply) || s->quit) {
         goto break_loop;
     }
 
@@ -961,11 +760,7 @@ break_loop:
 
     qemu_co_mutex_lock(&s->send_mutex);
     s->in_flight--;
-    if (s->in_flight == 0 && s->wait_in_flight) {
-        aio_co_wake(s->connection_co);
-    } else {
-        qemu_co_queue_next(&s->free_sema);
-    }
+    qemu_co_queue_next(&s->free_sema);
     qemu_co_mutex_unlock(&s->send_mutex);
 
     return false;
@@ -1013,14 +808,14 @@ static int nbd_co_receive_cmdread_reply(BDRVNBDState *s, uint64_t handle,
             ret = nbd_parse_offset_hole_payload(s, &reply.structured, payload,
                                                 offset, qiov, &local_err);
             if (ret < 0) {
-                nbd_channel_error(s, ret);
+                s->quit = true;
                 nbd_iter_channel_error(&iter, ret, &local_err);
             }
             break;
         default:
             if (!nbd_reply_type_is_error(chunk->type)) {
                 /* not allowed reply type */
-                nbd_channel_error(s, -EINVAL);
+                s->quit = true;
                 error_setg(&local_err,
                            "Unexpected reply type: %d (%s) for CMD_READ",
                            chunk->type, nbd_reply_type_lookup(chunk->type));
@@ -1058,7 +853,7 @@ static int nbd_co_receive_blockstatus_reply(BDRVNBDState *s,
         switch (chunk->type) {
         case NBD_REPLY_TYPE_BLOCK_STATUS:
             if (received) {
-                nbd_channel_error(s, -EINVAL);
+                s->quit = true;
                 error_setg(&local_err, "Several BLOCK_STATUS chunks in reply");
                 nbd_iter_channel_error(&iter, -EINVAL, &local_err);
             }
@@ -1068,13 +863,13 @@ static int nbd_co_receive_blockstatus_reply(BDRVNBDState *s,
                                                 payload, length, extent,
                                                 &local_err);
             if (ret < 0) {
-                nbd_channel_error(s, ret);
+                s->quit = true;
                 nbd_iter_channel_error(&iter, ret, &local_err);
             }
             break;
         default:
             if (!nbd_reply_type_is_error(chunk->type)) {
-                nbd_channel_error(s, -EINVAL);
+                s->quit = true;
                 error_setg(&local_err,
                            "Unexpected reply type: %d (%s) "
                            "for CMD_BLOCK_STATUS",
@@ -1111,26 +906,20 @@ static int nbd_co_request(BlockDriverState *bs, NBDRequest *request,
     } else {
         assert(request->type != NBD_CMD_WRITE);
     }
+    ret = nbd_co_send_request(bs, request, write_qiov);
+    if (ret < 0) {
+        return ret;
+    }
 
-    do {
-        ret = nbd_co_send_request(bs, request, write_qiov);
-        if (ret < 0) {
-            continue;
-        }
-
-        ret = nbd_co_receive_return_code(s, request->handle,
-                                         &request_ret, &local_err);
-        if (local_err) {
-            trace_nbd_co_request_fail(request->from, request->len,
-                                      request->handle, request->flags,
-                                      request->type,
-                                      nbd_cmd_lookup(request->type),
-                                      ret, error_get_pretty(local_err));
-            error_free(local_err);
-            local_err = NULL;
-        }
-    } while (ret < 0 && nbd_client_connecting_wait(s));
-
+    ret = nbd_co_receive_return_code(s, request->handle,
+                                     &request_ret, &local_err);
+    if (local_err) {
+        trace_nbd_co_request_fail(request->from, request->len, request->handle,
+                                  request->flags, request->type,
+                                  nbd_cmd_lookup(request->type),
+                                  ret, error_get_pretty(local_err));
+        error_free(local_err);
+    }
     return ret ? ret : request_ret;
 }
 
@@ -1171,24 +960,20 @@ static int nbd_client_co_preadv(BlockDriverState *bs, uint64_t offset,
         request.len -= slop;
     }
 
-    do {
-        ret = nbd_co_send_request(bs, &request, NULL);
-        if (ret < 0) {
-            continue;
-        }
+    ret = nbd_co_send_request(bs, &request, NULL);
+    if (ret < 0) {
+        return ret;
+    }
 
-        ret = nbd_co_receive_cmdread_reply(s, request.handle, offset, qiov,
-                                           &request_ret, &local_err);
-        if (local_err) {
-            trace_nbd_co_request_fail(request.from, request.len, request.handle,
-                                      request.flags, request.type,
-                                      nbd_cmd_lookup(request.type),
-                                      ret, error_get_pretty(local_err));
-            error_free(local_err);
-            local_err = NULL;
-        }
-    } while (ret < 0 && nbd_client_connecting_wait(s));
-
+    ret = nbd_co_receive_cmdread_reply(s, request.handle, offset, qiov,
+                                       &request_ret, &local_err);
+    if (local_err) {
+        trace_nbd_co_request_fail(request.from, request.len, request.handle,
+                                  request.flags, request.type,
+                                  nbd_cmd_lookup(request.type),
+                                  ret, error_get_pretty(local_err));
+        error_free(local_err);
+    }
     return ret ? ret : request_ret;
 }
 
@@ -1237,10 +1022,6 @@ static int nbd_client_co_pwrite_zeroes(BlockDriverState *bs, int64_t offset,
     }
     if (!(flags & BDRV_REQ_MAY_UNMAP)) {
         request.flags |= NBD_CMD_FLAG_NO_HOLE;
-    }
-    if (flags & BDRV_REQ_NO_FALLBACK) {
-        assert(s->info.flags & NBD_FLAG_SEND_FAST_ZERO);
-        request.flags |= NBD_CMD_FLAG_FAST_ZERO;
     }
 
     if (!bytes) {
@@ -1325,25 +1106,20 @@ static int coroutine_fn nbd_client_co_block_status(
     if (s->info.min_block) {
         assert(QEMU_IS_ALIGNED(request.len, s->info.min_block));
     }
-    do {
-        ret = nbd_co_send_request(bs, &request, NULL);
-        if (ret < 0) {
-            continue;
-        }
+    ret = nbd_co_send_request(bs, &request, NULL);
+    if (ret < 0) {
+        return ret;
+    }
 
-        ret = nbd_co_receive_blockstatus_reply(s, request.handle, bytes,
-                                               &extent, &request_ret,
-                                               &local_err);
-        if (local_err) {
-            trace_nbd_co_request_fail(request.from, request.len, request.handle,
-                                      request.flags, request.type,
-                                      nbd_cmd_lookup(request.type),
-                                      ret, error_get_pretty(local_err));
-            error_free(local_err);
-            local_err = NULL;
-        }
-    } while (ret < 0 && nbd_client_connecting_wait(s));
-
+    ret = nbd_co_receive_blockstatus_reply(s, request.handle, bytes,
+                                           &extent, &request_ret, &local_err);
+    if (local_err) {
+        trace_nbd_co_request_fail(request.from, request.len, request.handle,
+                                  request.flags, request.type,
+                                  nbd_cmd_lookup(request.type),
+                                  ret, error_get_pretty(local_err));
+        error_free(local_err);
+    }
     if (ret < 0 || request_ret < 0) {
         return ret ? ret : request_ret;
     }
@@ -1357,26 +1133,14 @@ static int coroutine_fn nbd_client_co_block_status(
         BDRV_BLOCK_OFFSET_VALID;
 }
 
-static int nbd_client_reopen_prepare(BDRVReopenState *state,
-                                     BlockReopenQueue *queue, Error **errp)
-{
-    BDRVNBDState *s = (BDRVNBDState *)state->bs->opaque;
-
-    if ((state->flags & BDRV_O_RDWR) && (s->info.flags & NBD_FLAG_READ_ONLY)) {
-        error_setg(errp, "Can't reopen read-only NBD mount as read/write");
-        return -EACCES;
-    }
-    return 0;
-}
-
 static void nbd_client_close(BlockDriverState *bs)
 {
     BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
     NBDRequest request = { .type = NBD_CMD_DISC };
 
-    if (s->ioc) {
-        nbd_send_request(s->ioc, &request);
-    }
+    assert(s->ioc);
+
+    nbd_send_request(s->ioc, &request);
 
     nbd_teardown_connection(bs);
 }
@@ -1402,43 +1166,47 @@ static QIOChannelSocket *nbd_establish_connection(SocketAddress *saddr,
     return sioc;
 }
 
-static int nbd_client_connect(BlockDriverState *bs, Error **errp)
+static int nbd_client_connect(BlockDriverState *bs,
+                              SocketAddress *saddr,
+                              const char *export,
+                              QCryptoTLSCreds *tlscreds,
+                              const char *hostname,
+                              const char *x_dirty_bitmap,
+                              Error **errp)
 {
     BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
-    AioContext *aio_context = bdrv_get_aio_context(bs);
     int ret;
 
     /*
      * establish TCP connection, return error if it fails
      * TODO: Configurable retry-until-timeout behaviour.
      */
-    QIOChannelSocket *sioc = nbd_establish_connection(s->saddr, errp);
+    QIOChannelSocket *sioc = nbd_establish_connection(saddr, errp);
 
     if (!sioc) {
         return -ECONNREFUSED;
     }
 
     /* NBD handshake */
-    trace_nbd_client_connect(s->export);
-    qio_channel_set_blocking(QIO_CHANNEL(sioc), false, NULL);
-    qio_channel_attach_aio_context(QIO_CHANNEL(sioc), aio_context);
+    trace_nbd_client_connect(export);
+    qio_channel_set_blocking(QIO_CHANNEL(sioc), true, NULL);
 
     s->info.request_sizes = true;
     s->info.structured_reply = true;
     s->info.base_allocation = true;
-    s->info.x_dirty_bitmap = g_strdup(s->x_dirty_bitmap);
-    s->info.name = g_strdup(s->export ?: "");
-    ret = nbd_receive_negotiate(aio_context, QIO_CHANNEL(sioc), s->tlscreds,
-                                s->hostname, &s->ioc, &s->info, errp);
+    s->info.x_dirty_bitmap = g_strdup(x_dirty_bitmap);
+    s->info.name = g_strdup(export ?: "");
+    ret = nbd_receive_negotiate(QIO_CHANNEL(sioc), tlscreds, hostname,
+                                &s->ioc, &s->info, errp);
     g_free(s->info.x_dirty_bitmap);
     g_free(s->info.name);
     if (ret < 0) {
         object_unref(OBJECT(sioc));
         return ret;
     }
-    if (s->x_dirty_bitmap && !s->info.base_allocation) {
+    if (x_dirty_bitmap && !s->info.base_allocation) {
         error_setg(errp, "requested x-dirty-bitmap %s not found",
-                   s->x_dirty_bitmap);
+                   x_dirty_bitmap);
         ret = -EINVAL;
         goto fail;
     }
@@ -1454,9 +1222,6 @@ static int nbd_client_connect(BlockDriverState *bs, Error **errp)
     }
     if (s->info.flags & NBD_FLAG_SEND_WRITE_ZEROES) {
         bs->supported_zero_flags |= BDRV_REQ_MAY_UNMAP;
-        if (s->info.flags & NBD_FLAG_SEND_FAST_ZERO) {
-            bs->supported_zero_flags |= BDRV_REQ_NO_FALLBACK;
-        }
     }
 
     s->sioc = sioc;
@@ -1466,14 +1231,24 @@ static int nbd_client_connect(BlockDriverState *bs, Error **errp)
         object_ref(OBJECT(s->ioc));
     }
 
-    trace_nbd_client_connect_success(s->export);
+    /*
+     * Now that we're connected, set the socket to be non-blocking and
+     * kick the reply mechanism.
+     */
+    qio_channel_set_blocking(QIO_CHANNEL(sioc), false, NULL);
+    s->connection_co = qemu_coroutine_create(nbd_connection_entry, s);
+    bdrv_inc_in_flight(bs);
+    nbd_client_attach_aio_context(bs, bdrv_get_aio_context(bs));
+
+    trace_nbd_client_connect_success(export);
 
     return 0;
 
  fail:
     /*
-     * We have connected, but must fail for other reasons.
-     * Send NBD_CMD_DISC as a courtesy to the server.
+     * We have connected, but must fail for other reasons. The
+     * connection is still blocking; send NBD_CMD_DISC as a courtesy
+     * to the server.
      */
     {
         NBDRequest request = { .type = NBD_CMD_DISC };
@@ -1486,9 +1261,23 @@ static int nbd_client_connect(BlockDriverState *bs, Error **errp)
     }
 }
 
-/*
- * Parse nbd_open options
- */
+static int nbd_client_init(BlockDriverState *bs,
+                           SocketAddress *saddr,
+                           const char *export,
+                           QCryptoTLSCreds *tlscreds,
+                           const char *hostname,
+                           const char *x_dirty_bitmap,
+                           Error **errp)
+{
+    BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
+
+    s->bs = bs;
+    qemu_co_mutex_init(&s->send_mutex);
+    qemu_co_queue_init(&s->free_sema);
+
+    return nbd_client_connect(bs, saddr, export, tlscreds, hostname,
+                              x_dirty_bitmap, errp);
+}
 
 static int nbd_parse_uri(const char *filename, QDict *options)
 {
@@ -1592,7 +1381,7 @@ static bool nbd_has_filename_options_conflict(QDict *options, Error **errp)
 static void nbd_parse_filename(const char *filename, QDict *options,
                                Error **errp)
 {
-    g_autofree char *file = NULL;
+    char *file;
     char *export_name;
     const char *host_spec;
     const char *unixpath;
@@ -1614,7 +1403,7 @@ static void nbd_parse_filename(const char *filename, QDict *options,
     export_name = strstr(file, EN_OPTSTR);
     if (export_name) {
         if (export_name[strlen(EN_OPTSTR)] == 0) {
-            return;
+            goto out;
         }
         export_name[0] = 0; /* truncate 'file' */
         export_name += strlen(EN_OPTSTR);
@@ -1625,11 +1414,11 @@ static void nbd_parse_filename(const char *filename, QDict *options,
     /* extract the host_spec - fail if it's not nbd:... */
     if (!strstart(file, "nbd:", &host_spec)) {
         error_setg(errp, "File name string for NBD must start with 'nbd:'");
-        return;
+        goto out;
     }
 
     if (!*host_spec) {
-        return;
+        goto out;
     }
 
     /* are we a UNIX or TCP socket? */
@@ -1649,6 +1438,9 @@ static void nbd_parse_filename(const char *filename, QDict *options,
     out_inet:
         qapi_free_InetSocketAddress(addr);
     }
+
+out:
+    g_free(file);
 }
 
 static bool nbd_process_legacy_socket_options(QDict *output_options,
@@ -1790,27 +1582,18 @@ static QemuOptsList nbd_runtime_opts = {
             .help = "experimental: expose named dirty bitmap in place of "
                     "block status",
         },
-        {
-            .name = "reconnect-delay",
-            .type = QEMU_OPT_NUMBER,
-            .help = "On an unexpected disconnect, the nbd client tries to "
-                    "connect again until succeeding or encountering a serious "
-                    "error.  During the first @reconnect-delay seconds, all "
-                    "requests are paused and will be rerun on a successful "
-                    "reconnect. After that time, any delayed requests and all "
-                    "future requests before a successful reconnect will "
-                    "immediately fail. Default 0",
-        },
         { /* end of list */ }
     },
 };
 
-static int nbd_process_options(BlockDriverState *bs, QDict *options,
-                               Error **errp)
+static int nbd_open(BlockDriverState *bs, QDict *options, int flags,
+                    Error **errp)
 {
     BDRVNBDState *s = bs->opaque;
-    QemuOpts *opts;
+    QemuOpts *opts = NULL;
     Error *local_err = NULL;
+    QCryptoTLSCreds *tlscreds = NULL;
+    const char *hostname = NULL;
     int ret = -EINVAL;
 
     opts = qemu_opts_create(&nbd_runtime_opts, NULL, 0, &error_abort);
@@ -1832,15 +1615,11 @@ static int nbd_process_options(BlockDriverState *bs, QDict *options,
     }
 
     s->export = g_strdup(qemu_opt_get(opts, "export"));
-    if (s->export && strlen(s->export) > NBD_MAX_STRING_SIZE) {
-        error_setg(errp, "export name too long to send to server");
-        goto error;
-    }
 
     s->tlscredsid = g_strdup(qemu_opt_get(opts, "tls-creds"));
     if (s->tlscredsid) {
-        s->tlscreds = nbd_get_tls_creds(s->tlscredsid, errp);
-        if (!s->tlscreds) {
+        tlscreds = nbd_get_tls_creds(s->tlscredsid, errp);
+        if (!tlscreds) {
             goto error;
         }
 
@@ -1849,58 +1628,24 @@ static int nbd_process_options(BlockDriverState *bs, QDict *options,
             error_setg(errp, "TLS only supported over IP sockets");
             goto error;
         }
-        s->hostname = s->saddr->u.inet.host;
+        hostname = s->saddr->u.inet.host;
     }
 
-    s->x_dirty_bitmap = g_strdup(qemu_opt_get(opts, "x-dirty-bitmap"));
-    if (s->x_dirty_bitmap && strlen(s->x_dirty_bitmap) > NBD_MAX_STRING_SIZE) {
-        error_setg(errp, "x-dirty-bitmap query too long to send to server");
-        goto error;
-    }
-
-    s->reconnect_delay = qemu_opt_get_number(opts, "reconnect-delay", 0);
-
-    ret = 0;
+    /* NBD handshake */
+    ret = nbd_client_init(bs, s->saddr, s->export, tlscreds, hostname,
+                          qemu_opt_get(opts, "x-dirty-bitmap"), errp);
 
  error:
+    if (tlscreds) {
+        object_unref(OBJECT(tlscreds));
+    }
     if (ret < 0) {
-        object_unref(OBJECT(s->tlscreds));
         qapi_free_SocketAddress(s->saddr);
         g_free(s->export);
         g_free(s->tlscredsid);
-        g_free(s->x_dirty_bitmap);
     }
     qemu_opts_del(opts);
     return ret;
-}
-
-static int nbd_open(BlockDriverState *bs, QDict *options, int flags,
-                    Error **errp)
-{
-    int ret;
-    BDRVNBDState *s = (BDRVNBDState *)bs->opaque;
-
-    ret = nbd_process_options(bs, options, errp);
-    if (ret < 0) {
-        return ret;
-    }
-
-    s->bs = bs;
-    qemu_co_mutex_init(&s->send_mutex);
-    qemu_co_queue_init(&s->free_sema);
-
-    ret = nbd_client_connect(bs, errp);
-    if (ret < 0) {
-        return ret;
-    }
-    /* successfully connected */
-    s->state = NBD_CLIENT_CONNECTED;
-
-    s->connection_co = qemu_coroutine_create(nbd_connection_entry, s);
-    bdrv_inc_in_flight(bs);
-    aio_co_schedule(bdrv_get_aio_context(bs), s->connection_co);
-
-    return 0;
 }
 
 static int nbd_co_flush(BlockDriverState *bs)
@@ -1948,11 +1693,9 @@ static void nbd_close(BlockDriverState *bs)
 
     nbd_client_close(bs);
 
-    object_unref(OBJECT(s->tlscreds));
     qapi_free_SocketAddress(s->saddr);
     g_free(s->export);
     g_free(s->tlscredsid);
-    g_free(s->x_dirty_bitmap);
 }
 
 static int64_t nbd_getlength(BlockDriverState *bs)
@@ -2019,7 +1762,6 @@ static BlockDriver bdrv_nbd = {
     .instance_size              = sizeof(BDRVNBDState),
     .bdrv_parse_filename        = nbd_parse_filename,
     .bdrv_file_open             = nbd_open,
-    .bdrv_reopen_prepare        = nbd_client_reopen_prepare,
     .bdrv_co_preadv             = nbd_client_co_preadv,
     .bdrv_co_pwritev            = nbd_client_co_pwritev,
     .bdrv_co_pwrite_zeroes      = nbd_client_co_pwrite_zeroes,
@@ -2030,8 +1772,6 @@ static BlockDriver bdrv_nbd = {
     .bdrv_getlength             = nbd_getlength,
     .bdrv_detach_aio_context    = nbd_client_detach_aio_context,
     .bdrv_attach_aio_context    = nbd_client_attach_aio_context,
-    .bdrv_co_drain_begin        = nbd_client_co_drain_begin,
-    .bdrv_co_drain_end          = nbd_client_co_drain_end,
     .bdrv_refresh_filename      = nbd_refresh_filename,
     .bdrv_co_block_status       = nbd_client_co_block_status,
     .bdrv_dirname               = nbd_dirname,
@@ -2044,7 +1784,6 @@ static BlockDriver bdrv_nbd_tcp = {
     .instance_size              = sizeof(BDRVNBDState),
     .bdrv_parse_filename        = nbd_parse_filename,
     .bdrv_file_open             = nbd_open,
-    .bdrv_reopen_prepare        = nbd_client_reopen_prepare,
     .bdrv_co_preadv             = nbd_client_co_preadv,
     .bdrv_co_pwritev            = nbd_client_co_pwritev,
     .bdrv_co_pwrite_zeroes      = nbd_client_co_pwrite_zeroes,
@@ -2055,8 +1794,6 @@ static BlockDriver bdrv_nbd_tcp = {
     .bdrv_getlength             = nbd_getlength,
     .bdrv_detach_aio_context    = nbd_client_detach_aio_context,
     .bdrv_attach_aio_context    = nbd_client_attach_aio_context,
-    .bdrv_co_drain_begin        = nbd_client_co_drain_begin,
-    .bdrv_co_drain_end          = nbd_client_co_drain_end,
     .bdrv_refresh_filename      = nbd_refresh_filename,
     .bdrv_co_block_status       = nbd_client_co_block_status,
     .bdrv_dirname               = nbd_dirname,
@@ -2069,7 +1806,6 @@ static BlockDriver bdrv_nbd_unix = {
     .instance_size              = sizeof(BDRVNBDState),
     .bdrv_parse_filename        = nbd_parse_filename,
     .bdrv_file_open             = nbd_open,
-    .bdrv_reopen_prepare        = nbd_client_reopen_prepare,
     .bdrv_co_preadv             = nbd_client_co_preadv,
     .bdrv_co_pwritev            = nbd_client_co_pwritev,
     .bdrv_co_pwrite_zeroes      = nbd_client_co_pwrite_zeroes,
@@ -2080,8 +1816,6 @@ static BlockDriver bdrv_nbd_unix = {
     .bdrv_getlength             = nbd_getlength,
     .bdrv_detach_aio_context    = nbd_client_detach_aio_context,
     .bdrv_attach_aio_context    = nbd_client_attach_aio_context,
-    .bdrv_co_drain_begin        = nbd_client_co_drain_begin,
-    .bdrv_co_drain_end          = nbd_client_co_drain_end,
     .bdrv_refresh_filename      = nbd_refresh_filename,
     .bdrv_co_block_status       = nbd_client_co_block_status,
     .bdrv_dirname               = nbd_dirname,

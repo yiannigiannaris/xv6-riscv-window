@@ -1,1 +1,1 @@
-doc-missing-space.json:5:1: missing space after #
+tests/qapi-schema/doc-missing-space.json:5:1: Missing space after #

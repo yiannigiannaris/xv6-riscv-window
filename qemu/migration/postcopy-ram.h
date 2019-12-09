@@ -20,7 +20,7 @@ bool postcopy_ram_supported_by_host(MigrationIncomingState *mis);
  * Make all of RAM sensitive to accesses to areas that haven't yet been written
  * and wire up anything necessary to deal with it.
  */
-int postcopy_ram_incoming_setup(MigrationIncomingState *mis);
+int postcopy_ram_enable_notify(MigrationIncomingState *mis);
 
 /*
  * Initialise postcopy-ram, setting the RAM to a state where we can go into
@@ -43,8 +43,10 @@ int postcopy_ram_prepare_discard(MigrationIncomingState *mis);
 
 /*
  * Called at the start of each RAMBlock by the bitmap code.
+ * Returns a new PDS
  */
-void postcopy_discard_send_init(MigrationState *ms, const char *name);
+PostcopyDiscardState *postcopy_discard_send_init(MigrationState *ms,
+                                                 const char *name);
 
 /*
  * Called by the bitmap code for each chunk to discard.
@@ -53,14 +55,15 @@ void postcopy_discard_send_init(MigrationState *ms, const char *name);
  * @start,@length: a range of pages in the migration bitmap in the
  *  RAM block passed to postcopy_discard_send_init() (length=1 is one page)
  */
-void postcopy_discard_send_range(MigrationState *ms, unsigned long start,
-                                 unsigned long length);
+void postcopy_discard_send_range(MigrationState *ms, PostcopyDiscardState *pds,
+                                 unsigned long start, unsigned long length);
 
 /*
  * Called at the end of each RAMBlock by the bitmap code.
- * Sends any outstanding discard messages.
+ * Sends any outstanding discard messages, frees the PDS.
  */
-void postcopy_discard_send_finish(MigrationState *ms);
+void postcopy_discard_send_finish(MigrationState *ms,
+                                  PostcopyDiscardState *pds);
 
 /*
  * Place a page (from) at (host) efficiently
@@ -99,6 +102,13 @@ typedef enum {
     POSTCOPY_INCOMING_RUNNING,
     POSTCOPY_INCOMING_END
 } PostcopyState;
+
+/*
+ * Allocate a page of memory that can be mapped at a later point in time
+ * using postcopy_place_page
+ * Returns: Pointer to allocated page
+ */
+void *postcopy_get_tmp_page(MigrationIncomingState *mis);
 
 PostcopyState postcopy_state_get(void);
 /* Set the state and return the old state */

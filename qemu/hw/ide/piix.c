@@ -24,10 +24,11 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "hw/pci/pci.h"
-#include "migration/vmstate.h"
 #include "qemu/module.h"
 #include "sysemu/block-backend.h"
+#include "sysemu/sysemu.h"
 #include "sysemu/blockdev.h"
 #include "sysemu/dma.h"
 
@@ -102,9 +103,9 @@ static void bmdma_setup_bar(PCIIDEState *d)
     }
 }
 
-static void piix_ide_reset(DeviceState *dev)
+static void piix3_reset(void *opaque)
 {
-    PCIIDEState *d = PCI_IDE(dev);
+    PCIIDEState *d = opaque;
     PCIDevice *pd = PCI_DEVICE(d);
     uint8_t *pci_conf = pd->config;
     int i;
@@ -152,6 +153,8 @@ static void pci_piix_ide_realize(PCIDevice *dev, Error **errp)
     uint8_t *pci_conf = dev->config;
 
     pci_conf[PCI_CLASS_PROG] = 0x80; // legacy ATA mode
+
+    qemu_register_reset(piix3_reset, d);
 
     bmdma_setup_bar(d);
     pci_register_bar(dev, 4, PCI_BASE_ADDRESS_SPACE_IO, &d->bmdma_bar);
@@ -244,7 +247,6 @@ static void piix3_ide_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    dc->reset = piix_ide_reset;
     k->realize = pci_piix_ide_realize;
     k->exit = pci_piix_ide_exitfn;
     k->vendor_id = PCI_VENDOR_ID_INTEL;
@@ -271,7 +273,6 @@ static void piix4_ide_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    dc->reset = piix_ide_reset;
     k->realize = pci_piix_ide_realize;
     k->exit = pci_piix_ide_exitfn;
     k->vendor_id = PCI_VENDOR_ID_INTEL;

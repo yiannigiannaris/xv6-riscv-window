@@ -20,7 +20,6 @@
 
 #include "qemu/osdep.h"
 #include "cpu.h"
-#include "hw/irq.h"
 
 #include "qemu/config-file.h"
 

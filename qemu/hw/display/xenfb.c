@@ -27,6 +27,7 @@
 #include "qemu/osdep.h"
 #include "qemu/units.h"
 
+#include "hw/hw.h"
 #include "ui/input.h"
 #include "ui/console.h"
 #include "hw/xen/xen-legacy-backend.h"

@@ -19,14 +19,13 @@
 #include "exec/cpu-common.h"
 #include "exec/hwaddr.h"
 #include "exec/memattrs.h"
-#include "exec/memop.h"
 #include "exec/ramlist.h"
-#include "qemu/bswap.h"
 #include "qemu/queue.h"
 #include "qemu/int128.h"
 #include "qemu/notify.h"
 #include "qom/object.h"
 #include "qemu/rcu.h"
+#include "hw/qdev-core.h"
 
 #define RAM_ADDR_INVALID (~(ram_addr_t)0)
 
@@ -206,12 +205,6 @@ struct MemoryRegionOps {
     } impl;
 };
 
-typedef struct MemoryRegionClass {
-    /* private */
-    ObjectClass parent_class;
-} MemoryRegionClass;
-
-
 enum IOMMUMemoryRegionAttr {
     IOMMU_ATTR_SPAPR_TCE_FD
 };
@@ -244,7 +237,7 @@ enum IOMMUMemoryRegionAttr {
  */
 typedef struct IOMMUMemoryRegionClass {
     /* private */
-    MemoryRegionClass parent_class;
+    struct DeviceClass parent_class;
 
     /*
      * Return a TLB entry that contains a given address.
@@ -288,16 +281,10 @@ typedef struct IOMMUMemoryRegionClass {
      * @iommu: the IOMMUMemoryRegion
      * @old_flags: events which previously needed to be notified
      * @new_flags: events which now need to be notified
-     *
-     * Returns 0 on success, or a negative errno; in particular
-     * returns -EINVAL if the new flag bitmap is not supported by the
-     * IOMMU memory region. In case of failure, the error object
-     * must be created
      */
-    int (*notify_flag_changed)(IOMMUMemoryRegion *iommu,
-                               IOMMUNotifierFlag old_flags,
-                               IOMMUNotifierFlag new_flags,
-                               Error **errp);
+    void (*notify_flag_changed)(IOMMUMemoryRegion *iommu,
+                                IOMMUNotifierFlag old_flags,
+                                IOMMUNotifierFlag new_flags);
     /* Called to handle memory_region_iommu_replay().
      *
      * The default implementation of memory_region_iommu_replay() is to
@@ -432,7 +419,6 @@ struct MemoryListener {
     void (*log_clear)(MemoryListener *listener, MemoryRegionSection *section);
     void (*log_global_start)(MemoryListener *listener);
     void (*log_global_stop)(MemoryListener *listener);
-    void (*log_global_after_sync)(MemoryListener *listener);
     void (*eventfd_add)(MemoryListener *listener, MemoryRegionSection *section,
                         bool match_data, uint64_t data, EventNotifier *e);
     void (*eventfd_del)(MemoryListener *listener, MemoryRegionSection *section,
@@ -1085,18 +1071,13 @@ void memory_region_notify_one(IOMMUNotifier *notifier,
  * memory_region_register_iommu_notifier: register a notifier for changes to
  * IOMMU translation entries.
  *
- * Returns 0 on success, or a negative errno otherwise. In particular,
- * -EINVAL indicates that at least one of the attributes of the notifier
- * is not supported (flag/range) by the IOMMU memory region. In case of error
- * the error object must be created.
- *
  * @mr: the memory region to observe
  * @n: the IOMMUNotifier to be added; the notify callback receives a
  *     pointer to an #IOMMUTLBEntry as the opaque value; the pointer
  *     ceases to be valid on exit from the notifier.
  */
-int memory_region_register_iommu_notifier(MemoryRegion *mr,
-                                          IOMMUNotifier *n, Error **errp);
+void memory_region_register_iommu_notifier(MemoryRegion *mr,
+                                           IOMMUNotifier *n);
 
 /**
  * memory_region_iommu_replay: replay existing IOMMU translations to
@@ -1109,6 +1090,16 @@ int memory_region_register_iommu_notifier(MemoryRegion *mr,
  * @n: the notifier to which to replay iommu mappings
  */
 void memory_region_iommu_replay(IOMMUMemoryRegion *iommu_mr, IOMMUNotifier *n);
+
+/**
+ * memory_region_iommu_replay_all: replay existing IOMMU translations
+ * to all the notifiers registered.
+ *
+ * Note: this is not related to record-and-replay functionality.
+ *
+ * @iommu_mr: the memory region to observe
+ */
+void memory_region_iommu_replay_all(IOMMUMemoryRegion *iommu_mr);
 
 /**
  * memory_region_unregister_iommu_notifier: unregister a notifier for
@@ -1703,17 +1694,6 @@ MemoryRegionSection memory_region_find(MemoryRegion *mr,
 void memory_global_dirty_log_sync(void);
 
 /**
- * memory_global_dirty_log_sync: synchronize the dirty log for all memory
- *
- * Synchronizes the vCPUs with a thread that is reading the dirty bitmap.
- * This function must be called after the dirty log bitmap is cleared, and
- * before dirty guest memory pages are read.  If you are using
- * #DirtyBitmapSnapshot, memory_region_snapshot_and_clear_dirty() takes
- * care of doing this.
- */
-void memory_global_after_dirty_log_sync(void);
-
-/**
  * memory_region_transaction_begin: Start a transaction.
  *
  * During a transaction, changes will be accumulated and made visible
@@ -1763,13 +1743,13 @@ void mtree_info(bool flatview, bool dispatch_tree, bool owner);
  * @mr: #MemoryRegion to access
  * @addr: address within that region
  * @pval: pointer to uint64_t which the data is written to
- * @op: size, sign, and endianness of the memory operation
+ * @size: size of the access in bytes
  * @attrs: memory transaction attributes to use for the access
  */
 MemTxResult memory_region_dispatch_read(MemoryRegion *mr,
                                         hwaddr addr,
                                         uint64_t *pval,
-                                        MemOp op,
+                                        unsigned size,
                                         MemTxAttrs attrs);
 /**
  * memory_region_dispatch_write: perform a write directly to the specified
@@ -1778,13 +1758,13 @@ MemTxResult memory_region_dispatch_read(MemoryRegion *mr,
  * @mr: #MemoryRegion to access
  * @addr: address within that region
  * @data: data to write
- * @op: size, sign, and endianness of the memory operation
+ * @size: size of the access in bytes
  * @attrs: memory transaction attributes to use for the access
  */
 MemTxResult memory_region_dispatch_write(MemoryRegion *mr,
                                          hwaddr addr,
                                          uint64_t data,
-                                         MemOp op,
+                                         unsigned size,
                                          MemTxAttrs attrs);
 
 /**
@@ -2223,26 +2203,6 @@ address_space_write_cached(MemoryRegionCache *cache, hwaddr addr,
         address_space_write_cached_slow(cache, addr, buf, len);
     }
 }
-
-#ifdef NEED_CPU_H
-/* enum device_endian to MemOp.  */
-static inline MemOp devend_memop(enum device_endian end)
-{
-    QEMU_BUILD_BUG_ON(DEVICE_HOST_ENDIAN != DEVICE_LITTLE_ENDIAN &&
-                      DEVICE_HOST_ENDIAN != DEVICE_BIG_ENDIAN);
-
-#if defined(HOST_WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
-    /* Swap if non-host endianness or native (target) endianness */
-    return (end == DEVICE_HOST_ENDIAN) ? 0 : MO_BSWAP;
-#else
-    const int non_host_endianness =
-        DEVICE_LITTLE_ENDIAN ^ DEVICE_BIG_ENDIAN ^ DEVICE_HOST_ENDIAN;
-
-    /* In this case, native (target) endianness needs no swap.  */
-    return (end == non_host_endianness) ? MO_BSWAP : 0;
-#endif
-}
-#endif
 
 #endif
 

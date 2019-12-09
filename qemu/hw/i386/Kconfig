@@ -8,9 +8,6 @@ config PC
     imply HYPERV
     imply ISA_IPMI_KCS
     imply ISA_IPMI_BT
-    imply PCI_IPMI_KCS
-    imply PCI_IPMI_BT
-    imply IPMI_SSIF
     imply ISA_DEBUG
     imply PARALLEL
     imply PCI_DEVICES
@@ -32,7 +29,6 @@ config PC
     select MC146818RTC
     # For ACPI builder:
     select SERIAL_ISA
-    select ACPI_PCI
     select ACPI_VMGENID
     select VIRTIO_PMEM_SUPPORTED
 
@@ -60,8 +56,7 @@ config I440FX
     select PC_PCI
     select PC_ACPI
     select ACPI_SMBUS
-    select PCI_I440FX
-    select PIIX3
+    select PCI_PIIX
     select IDE_PIIX
     select DIMM
     select SMBIOS
@@ -92,16 +87,6 @@ config Q35
     select DIMM
     select SMBIOS
     select FW_CFG_DMA
-
-config MICROVM
-    bool
-    imply SERIAL_ISA
-    select ISA_BUS
-    select APIC
-    select IOAPIC
-    select I8259
-    select MC146818RTC
-    select VIRTIO_MMIO
 
 config VTD
     bool

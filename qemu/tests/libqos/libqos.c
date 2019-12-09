@@ -125,8 +125,7 @@ void migrate(QOSState *from, QOSState *to, const char *uri)
             break;
         }
 
-        if ((strcmp(st, "setup") == 0) || (strcmp(st, "active") == 0)
-            || (strcmp(st, "wait-unplug") == 0)) {
+        if ((strcmp(st, "setup") == 0) || (strcmp(st, "active") == 0)) {
             qobject_unref(rsp);
             g_usleep(5000);
             continue;

@@ -24,7 +24,6 @@
 #include <sys/user.h>
 
 #include "qemu/config-file.h"
-#include "qemu/main-loop.h"
 #include "qemu/option.h"
 #include "hw/sysbus.h"
 #include "hw/usb.h"

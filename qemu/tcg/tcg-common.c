@@ -23,6 +23,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "exec/cpu-common.h"
 #include "tcg/tcg.h"
 
 #if defined(CONFIG_TCG_INTERPRETER)

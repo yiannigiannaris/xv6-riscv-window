@@ -20,7 +20,7 @@
 #ifndef QEMU_ARM_CPU_QOM_H
 #define QEMU_ARM_CPU_QOM_H
 
-#include "hw/core/cpu.h"
+#include "qom/cpu.h"
 
 struct arm_boot_info;
 

@@ -11,7 +11,6 @@
 
 #include "qemu/osdep.h"
 #include "hw/intc/imx_gpcv2.h"
-#include "migration/vmstate.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
 

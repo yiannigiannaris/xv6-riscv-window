@@ -33,8 +33,6 @@ def interface_to_device_name(interface):
         return 'ide-cd'
     elif interface == 'floppy':
         return 'floppy'
-    elif interface == 'scsi':
-        return 'scsi-cd'
     else:
         return None
 
@@ -42,14 +40,10 @@ class ChangeBaseClass(iotests.QMPTestCase):
     has_opened = False
     has_closed = False
 
-    device_name = 'qdev0'
-    use_drive = False
-
     def process_events(self):
         for event in self.vm.get_qmp_events(wait=False):
             if (event['event'] == 'DEVICE_TRAY_MOVED' and
-                (event['data']['device'] == 'drive0' or
-                 event['data']['id'] == self.device_name)):
+                event['data']['device'] == 'drive0'):
                 if event['data']['tray-open'] == False:
                     self.has_closed = True
                 else:
@@ -73,11 +67,9 @@ class ChangeBaseClass(iotests.QMPTestCase):
 
 class GeneralChangeTestsBaseClass(ChangeBaseClass):
 
-    def test_change(self):
-        # 'change' requires a drive name, so skip the test for blockdev
-        if not self.use_drive:
-            return
+    device_name = 'qdev0'
 
+    def test_change(self):
         result = self.vm.qmp('change', device='drive0', target=new_img,
                                        arg=iotests.imgfmt)
         self.assert_qmp(result, 'return', {})
@@ -300,21 +292,13 @@ class GeneralChangeTestsBaseClass(ChangeBaseClass):
 class TestInitiallyFilled(GeneralChangeTestsBaseClass):
     was_empty = False
 
-    def setUp(self):
+    def setUp(self, media, interface):
         qemu_img('create', '-f', iotests.imgfmt, old_img, '1440k')
         qemu_img('create', '-f', iotests.imgfmt, new_img, '1440k')
         self.vm = iotests.VM()
-        if self.use_drive:
-            self.vm.add_drive(old_img, 'media=%s' % self.media, 'none')
-        else:
-            self.vm.add_blockdev([ 'node-name=drive0',
-                                   'driver=%s' % iotests.imgfmt,
-                                   'file.driver=file',
-                                   'file.filename=%s' % old_img ])
-        if self.interface == 'scsi':
-            self.vm.add_device('virtio-scsi-pci')
+        self.vm.add_drive(old_img, 'media=%s' % media, 'none')
         self.vm.add_device('%s,drive=drive0,id=%s' %
-                           (interface_to_device_name(self.interface),
+                           (interface_to_device_name(interface),
                             self.device_name))
         self.vm.launch()
 
@@ -343,16 +327,11 @@ class TestInitiallyFilled(GeneralChangeTestsBaseClass):
 class TestInitiallyEmpty(GeneralChangeTestsBaseClass):
     was_empty = True
 
-    def setUp(self):
+    def setUp(self, media, interface):
         qemu_img('create', '-f', iotests.imgfmt, new_img, '1440k')
-        self.vm = iotests.VM()
-        if self.use_drive:
-            self.vm.add_drive(None, 'media=%s' % self.media, 'none')
-        if self.interface == 'scsi':
-            self.vm.add_device('virtio-scsi-pci')
-        self.vm.add_device('%s,%sid=%s' %
-                           (interface_to_device_name(self.interface),
-                            'drive=drive0,' if self.use_drive else '',
+        self.vm = iotests.VM().add_drive(None, 'media=%s' % media, 'none')
+        self.vm.add_device('%s,drive=drive0,id=%s' %
+                           (interface_to_device_name(interface),
                             self.device_name))
         self.vm.launch()
 
@@ -370,25 +349,36 @@ class TestInitiallyEmpty(GeneralChangeTestsBaseClass):
         # Should be a no-op
         self.assert_qmp(result, 'return', {})
 
-# Do this in a function to avoid leaking variables like case into the global
-# name space (otherwise tests would be run for the abstract base classes)
-def create_basic_test_classes():
-    for (media, interface, has_real_tray) in [ ('cdrom', 'ide', True),
-                                               ('cdrom', 'scsi', True),
-                                               ('disk', 'floppy', False) ]:
+class TestCDInitiallyFilled(TestInitiallyFilled):
+    TestInitiallyFilled = TestInitiallyFilled
+    has_real_tray = True
 
-        for case in [ TestInitiallyFilled, TestInitiallyEmpty ]:
-            for use_drive in [ True, False ]:
-                attr = { 'media': media,
-                         'interface': interface,
-                         'has_real_tray': has_real_tray,
-                         'use_drive': use_drive }
+    def setUp(self):
+        self.TestInitiallyFilled.setUp(self, 'cdrom', 'ide')
 
-                name = '%s_%s_%s_%s' % (case.__name__, media, interface,
-                                        'drive' if use_drive else 'blockdev')
-                globals()[name] = type(name, (case, ), attr)
+class TestCDInitiallyEmpty(TestInitiallyEmpty):
+    TestInitiallyEmpty = TestInitiallyEmpty
+    has_real_tray = True
 
-create_basic_test_classes()
+    def setUp(self):
+        self.TestInitiallyEmpty.setUp(self, 'cdrom', 'ide')
+
+class TestFloppyInitiallyFilled(TestInitiallyFilled):
+    TestInitiallyFilled = TestInitiallyFilled
+    has_real_tray = False
+
+    def setUp(self):
+        self.TestInitiallyFilled.setUp(self, 'disk', 'floppy')
+
+class TestFloppyInitiallyEmpty(TestInitiallyEmpty):
+    TestInitiallyEmpty = TestInitiallyEmpty
+    has_real_tray = False
+
+    def setUp(self):
+        self.TestInitiallyEmpty.setUp(self, 'disk', 'floppy')
+        # FDDs not having a real tray and there not being a medium inside the
+        # tray at startup means the tray will be considered open
+        self.has_opened = True
 
 class TestChangeReadOnly(ChangeBaseClass):
     device_name = 'qdev0'
@@ -446,7 +436,6 @@ class TestChangeReadOnly(ChangeBaseClass):
         self.assert_qmp(result, 'return[0]/inserted/ro', True)
         self.assert_qmp(result, 'return[0]/inserted/image/filename', new_img)
 
-    @iotests.skip_if_user_is_root
     def test_rw_ro_retain(self):
         os.chmod(new_img, 0o444)
         self.vm.add_drive(old_img, 'media=disk', 'none')
@@ -531,7 +520,6 @@ class TestChangeReadOnly(ChangeBaseClass):
         self.assert_qmp(result, 'return[0]/inserted/ro', True)
         self.assert_qmp(result, 'return[0]/inserted/image/filename', new_img)
 
-    @iotests.skip_if_user_is_root
     def test_make_ro_rw(self):
         os.chmod(new_img, 0o444)
         self.vm.add_drive(old_img, 'media=disk', 'none')
@@ -573,7 +561,6 @@ class TestChangeReadOnly(ChangeBaseClass):
         self.assert_qmp(result, 'return[0]/inserted/ro', True)
         self.assert_qmp(result, 'return[0]/inserted/image/filename', new_img)
 
-    @iotests.skip_if_user_is_root
     def test_make_ro_rw_by_retain(self):
         os.chmod(new_img, 0o444)
         self.vm.add_drive(old_img, 'media=disk', 'none')

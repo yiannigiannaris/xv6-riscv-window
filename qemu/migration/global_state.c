@@ -13,7 +13,6 @@
 #include "qemu/osdep.h"
 #include "qemu/cutils.h"
 #include "qemu/error-report.h"
-#include "sysemu/runstate.h"
 #include "qapi/error.h"
 #include "migration.h"
 #include "migration/global_state.h"

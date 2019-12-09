@@ -2730,8 +2730,7 @@ GList *ga_command_blacklist_init(GList *blacklist)
             "guest-suspend-hybrid", "guest-network-get-interfaces",
             "guest-get-vcpus", "guest-set-vcpus",
             "guest-get-memory-blocks", "guest-set-memory-blocks",
-            "guest-get-memory-block-size", "guest-get-memory-block-info",
-            NULL};
+            "guest-get-memory-block-size", NULL};
         char **p = (char **)list;
 
         while (*p) {

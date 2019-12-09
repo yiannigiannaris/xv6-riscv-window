@@ -1,2 +1,1 @@
-union-branch-invalid-dict.json: In union 'UnionInvalidBranch':
-union-branch-invalid-dict.json:2: 'data' member 'integer' misses key 'type'
+tests/qapi-schema/union-branch-invalid-dict.json:2: Key 'type' is missing from member 'integer' of union 'UnionInvalidBranch'

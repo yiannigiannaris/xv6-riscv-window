@@ -32,13 +32,11 @@
 #include "block/qdict.h"
 #include "trace.h"
 #include "qemu/iov.h"
-#include "qemu/main-loop.h"
 #include "qemu/module.h"
 #include "qemu/option.h"
 #include "qemu/uri.h"
 #include "qemu/cutils.h"
 #include "sysemu/sysemu.h"
-#include "sysemu/replay.h"
 #include "qapi/qapi-visit-block-core.h"
 #include "qapi/qmp/qdict.h"
 #include "qapi/qmp/qstring.h"
@@ -259,8 +257,8 @@ nfs_co_generic_cb(int ret, struct nfs_context *nfs, void *data,
     if (task->ret < 0) {
         error_report("NFS Error: %s", nfs_get_error(nfs));
     }
-    replay_bh_schedule_oneshot_event(task->client->aio_context,
-                                     nfs_co_generic_bh_cb, task);
+    aio_bh_schedule_oneshot(task->client->aio_context,
+                            nfs_co_generic_bh_cb, task);
 }
 
 static int coroutine_fn nfs_co_preadv(BlockDriverState *bs, uint64_t offset,
@@ -400,9 +398,6 @@ static void nfs_client_close(NFSClient *client)
             nfs_close(client->context, client->fh);
             client->fh = NULL;
         }
-#ifdef LIBNFS_FEATURE_UMOUNT
-        nfs_umount(client->context);
-#endif
         nfs_destroy_context(client->context);
         client->context = NULL;
     }
@@ -752,7 +747,7 @@ static int64_t nfs_get_allocated_file_size(BlockDriverState *bs)
 }
 
 static int coroutine_fn
-nfs_file_co_truncate(BlockDriverState *bs, int64_t offset, bool exact,
+nfs_file_co_truncate(BlockDriverState *bs, int64_t offset,
                      PreallocMode prealloc, Error **errp)
 {
     NFSClient *client = bs->opaque;
@@ -870,7 +865,6 @@ static BlockDriver bdrv_nfs = {
     .create_opts                    = &nfs_create_opts,
 
     .bdrv_has_zero_init             = nfs_has_zero_init,
-    .bdrv_has_zero_init_truncate    = nfs_has_zero_init,
     .bdrv_get_allocated_file_size   = nfs_get_allocated_file_size,
     .bdrv_co_truncate               = nfs_file_co_truncate,
 

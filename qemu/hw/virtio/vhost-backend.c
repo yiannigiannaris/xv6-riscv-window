@@ -12,7 +12,6 @@
 #include "hw/virtio/vhost.h"
 #include "hw/virtio/vhost-backend.h"
 #include "qemu/error-report.h"
-#include "qemu/main-loop.h"
 #include "standard-headers/linux/vhost_types.h"
 
 #ifdef CONFIG_VHOST_KERNEL

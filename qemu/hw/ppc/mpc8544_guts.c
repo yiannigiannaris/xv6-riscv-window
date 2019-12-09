@@ -19,8 +19,9 @@
 
 #include "qemu/osdep.h"
 #include "qemu/module.h"
-#include "sysemu/runstate.h"
 #include "cpu.h"
+#include "hw/hw.h"
+#include "sysemu/sysemu.h"
 #include "hw/sysbus.h"
 
 #define MPC8544_GUTS_MMIO_SIZE        0x1000

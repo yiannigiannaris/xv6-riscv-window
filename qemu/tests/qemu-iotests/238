@@ -23,7 +23,10 @@ import os
 import iotests
 from iotests import log
 
-virtio_scsi_device = iotests.get_virtio_scsi_device()
+if iotests.qemu_default_machine == 's390-ccw-virtio':
+    virtio_scsi_device = 'virtio-scsi-ccw'
+else:
+    virtio_scsi_device = 'virtio-scsi-pci'
 
 vm = iotests.VM()
 vm.launch()

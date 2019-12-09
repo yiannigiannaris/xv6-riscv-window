@@ -485,11 +485,7 @@ static void test_signal(void)
     act.sa_flags = SA_SIGINFO;
     chk_error(sigaction(SIGSEGV, &act, NULL));
     if (setjmp(jmp_env) == 0) {
-        /*
-         * clang requires volatile or it will turn this into a
-         * call to abort() instead of forcing a SIGSEGV.
-         */
-        *(volatile uint8_t *)0 = 0;
+        *(uint8_t *)0 = 0;
     }
 
     act.sa_handler = SIG_DFL;
@@ -507,9 +503,8 @@ static void test_shm(void)
 
     shmid = chk_error(shmget(IPC_PRIVATE, SHM_SIZE, IPC_CREAT | 0777));
     ptr = shmat(shmid, NULL, 0);
-    if (ptr == (void *)-1) {
+    if (!ptr)
         error("shmat");
-    }
 
     memset(ptr, 0, SHM_SIZE);
 

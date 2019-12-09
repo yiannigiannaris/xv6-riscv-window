@@ -1295,8 +1295,7 @@ static int64_t ssh_getlength(BlockDriverState *bs)
 }
 
 static int coroutine_fn ssh_co_truncate(BlockDriverState *bs, int64_t offset,
-                                        bool exact, PreallocMode prealloc,
-                                        Error **errp)
+                                        PreallocMode prealloc, Error **errp)
 {
     BDRVSSHState *s = bs->opaque;
 
@@ -1391,7 +1390,6 @@ static BlockDriver bdrv_ssh = {
     .bdrv_co_create_opts          = ssh_co_create_opts,
     .bdrv_close                   = ssh_close,
     .bdrv_has_zero_init           = ssh_has_zero_init,
-    .bdrv_has_zero_init_truncate  = ssh_has_zero_init,
     .bdrv_co_readv                = ssh_co_readv,
     .bdrv_co_writev               = ssh_co_writev,
     .bdrv_getlength               = ssh_getlength,

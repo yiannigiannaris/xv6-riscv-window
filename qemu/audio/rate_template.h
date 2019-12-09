@@ -28,7 +28,7 @@
  * Return number of samples processed.
  */
 void NAME (void *opaque, struct st_sample *ibuf, struct st_sample *obuf,
-           size_t *isamp, size_t *osamp)
+           int *isamp, int *osamp)
 {
     struct rate *rate = opaque;
     struct st_sample *istart, *iend;

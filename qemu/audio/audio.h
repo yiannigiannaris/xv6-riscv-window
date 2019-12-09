@@ -27,7 +27,6 @@
 
 #include "qemu/queue.h"
 #include "qapi/qapi-types-audio.h"
-#include "hw/qdev-properties.h"
 
 typedef void (*audio_callback_fn) (void *opaque, int avail);
 
@@ -79,10 +78,8 @@ typedef struct SWVoiceOut SWVoiceOut;
 typedef struct CaptureVoiceOut CaptureVoiceOut;
 typedef struct SWVoiceIn SWVoiceIn;
 
-typedef struct AudioState AudioState;
 typedef struct QEMUSoundCard {
     char *name;
-    AudioState *state;
     QLIST_ENTRY (QEMUSoundCard) entries;
 } QEMUSoundCard;
 
@@ -95,8 +92,7 @@ void AUD_log (const char *cap, const char *fmt, ...) GCC_FMT_ATTR(2, 3);
 
 void AUD_register_card (const char *name, QEMUSoundCard *card);
 void AUD_remove_card (QEMUSoundCard *card);
-CaptureVoiceOut *AUD_add_capture(
-    AudioState *s,
+CaptureVoiceOut *AUD_add_capture (
     struct audsettings *as,
     struct audio_capture_ops *ops,
     void *opaque
@@ -113,7 +109,7 @@ SWVoiceOut *AUD_open_out (
     );
 
 void AUD_close_out (QEMUSoundCard *card, SWVoiceOut *sw);
-size_t AUD_write (SWVoiceOut *sw, void *pcm_buf, size_t size);
+int  AUD_write (SWVoiceOut *sw, void *pcm_buf, int size);
 int  AUD_get_buffer_size_out (SWVoiceOut *sw);
 void AUD_set_active_out (SWVoiceOut *sw, int on);
 int  AUD_is_active_out (SWVoiceOut *sw);
@@ -123,16 +119,6 @@ uint64_t AUD_get_elapsed_usec_out (SWVoiceOut *sw, QEMUAudioTimeStamp *ts);
 
 void AUD_set_volume_out (SWVoiceOut *sw, int mute, uint8_t lvol, uint8_t rvol);
 void AUD_set_volume_in (SWVoiceIn *sw, int mute, uint8_t lvol, uint8_t rvol);
-
-#define AUDIO_MAX_CHANNELS 16
-typedef struct Volume {
-    bool mute;
-    int channels;
-    uint8_t vol[AUDIO_MAX_CHANNELS];
-} Volume;
-
-void audio_set_volume_out(SWVoiceOut *sw, Volume *vol);
-void audio_set_volume_in(SWVoiceIn *sw, Volume *vol);
 
 SWVoiceIn *AUD_open_in (
     QEMUSoundCard *card,
@@ -144,7 +130,7 @@ SWVoiceIn *AUD_open_in (
     );
 
 void AUD_close_in (QEMUSoundCard *card, SWVoiceIn *sw);
-size_t AUD_read (SWVoiceIn *sw, void *pcm_buf, size_t size);
+int  AUD_read (SWVoiceIn *sw, void *pcm_buf, int size);
 void AUD_set_active_in (SWVoiceIn *sw, int on);
 int  AUD_is_active_in (SWVoiceIn *sw);
 
@@ -157,8 +143,25 @@ static inline void *advance (void *p, int incr)
     return (d + incr);
 }
 
-int wav_start_capture(AudioState *state, CaptureState *s, const char *path,
-                      int freq, int bits, int nchannels);
+#ifdef __GNUC__
+#define audio_MIN(a, b) ( __extension__ ({      \
+    __typeof (a) ta = a;                        \
+    __typeof (b) tb = b;                        \
+    ((ta)>(tb)?(tb):(ta));                      \
+}))
+
+#define audio_MAX(a, b) ( __extension__ ({      \
+    __typeof (a) ta = a;                        \
+    __typeof (b) tb = b;                        \
+    ((ta)<(tb)?(tb):(ta));                      \
+}))
+#else
+#define audio_MIN(a, b) ((a)>(b)?(b):(a))
+#define audio_MAX(a, b) ((a)<(b)?(b):(a))
+#endif
+
+int wav_start_capture (CaptureState *s, const char *path, int freq,
+                       int bits, int nchannels);
 
 bool audio_is_cleaning_up(void);
 void audio_cleanup(void);
@@ -171,11 +174,5 @@ void audio_sample_from_uint64(void *samples, int pos,
 void audio_parse_option(const char *opt);
 void audio_init_audiodevs(void);
 void audio_legacy_help(void);
-
-AudioState *audio_state_by_name(const char *name);
-const char *audio_get_id(QEMUSoundCard *card);
-
-#define DEFINE_AUDIO_PROPERTIES(_s, _f)         \
-    DEFINE_PROP_AUDIODEV("audiodev", _s, _f)
 
 #endif /* QEMU_AUDIO_H */

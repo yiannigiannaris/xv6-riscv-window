@@ -23,7 +23,6 @@
 #include "qapi/string-output-visitor.h"
 #include "qemu/error-report.h"
 #include "sysemu/numa.h"
-#include "hw/boards.h"
 
 void hmp_info_cpus(Monitor *mon, const QDict *qdict)
 {
@@ -140,21 +139,15 @@ void hmp_info_memdev(Monitor *mon, const QDict *qdict)
 
 void hmp_info_numa(Monitor *mon, const QDict *qdict)
 {
-    int i, nb_numa_nodes;
+    int i;
     NumaNodeMem *node_mem;
     CpuInfoList *cpu_list, *cpu;
-    MachineState *ms = MACHINE(qdev_get_machine());
-
-    nb_numa_nodes = ms->numa_state ? ms->numa_state->num_nodes : 0;
-    monitor_printf(mon, "%d nodes\n", nb_numa_nodes);
-    if (!nb_numa_nodes) {
-        return;
-    }
 
     cpu_list = qmp_query_cpus(&error_abort);
     node_mem = g_new0(NumaNodeMem, nb_numa_nodes);
 
-    query_numa_node_mem(node_mem, ms);
+    query_numa_node_mem(node_mem);
+    monitor_printf(mon, "%d nodes\n", nb_numa_nodes);
     for (i = 0; i < nb_numa_nodes; i++) {
         monitor_printf(mon, "node %d cpus:", i);
         for (cpu = cpu_list; cpu; cpu = cpu->next) {

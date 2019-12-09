@@ -2,7 +2,6 @@
 #define HW_LM32_H
 
 #include "hw/char/lm32_juart.h"
-#include "hw/qdev-properties.h"
 
 static inline DeviceState *lm32_pic_init(qemu_irq cpu_irq)
 {

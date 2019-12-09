@@ -13,7 +13,6 @@
 
 #include "qemu/osdep.h"
 #include "hw/vfio/vfio-amd-xgbe.h"
-#include "migration/vmstate.h"
 #include "qemu/module.h"
 
 static void amd_xgbe_realize(DeviceState *dev, Error **errp)

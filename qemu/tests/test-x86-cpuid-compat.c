@@ -4,7 +4,7 @@
 #include "qapi/qmp/qlist.h"
 #include "qapi/qmp/qnum.h"
 #include "qapi/qmp/qbool.h"
-#include "libqtest-single.h"
+#include "libqtest.h"
 
 static char *get_cpu0_qom_path(void)
 {

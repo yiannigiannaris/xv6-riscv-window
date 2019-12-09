@@ -14,7 +14,6 @@ See the COPYING file in the top-level directory.
 """
 
 from qapi.common import *
-from qapi.gen import QAPIGenCCode, QAPISchemaModularCVisitor, ifcontext
 
 
 def gen_command_decl(name, arg_type, boxed, ret_type):
@@ -31,7 +30,7 @@ def gen_call(name, arg_type, boxed, ret_type):
 
     argstr = ''
     if boxed:
-        assert arg_type
+        assert arg_type and not arg_type.is_empty()
         argstr = '&arg, '
     elif arg_type:
         assert not arg_type.variants
@@ -97,7 +96,7 @@ def gen_marshal_decl(name):
 
 
 def gen_marshal(name, arg_type, boxed, ret_type):
-    have_args = boxed or (arg_type and not arg_type.is_empty())
+    have_args = arg_type and not arg_type.is_empty()
 
     ret = mcgen('''
 
@@ -277,8 +276,7 @@ void %(c_prefix)sqmp_init_marshal(QmpCommandList *cmds);
         genc.add(gen_registry(self._regy.get_content(), self._prefix))
 
     def visit_command(self, name, info, ifcond, arg_type, ret_type, gen,
-                      success_response, boxed, allow_oob, allow_preconfig,
-                      features):
+                      success_response, boxed, allow_oob, allow_preconfig):
         if not gen:
             return
         # FIXME: If T is a user-defined type, the user is responsible

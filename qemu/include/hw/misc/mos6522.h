@@ -29,6 +29,7 @@
 
 #include "exec/memory.h"
 #include "hw/sysbus.h"
+#include "hw/ide/internal.h"
 #include "hw/input/adb.h"
 
 /* Bits in ACR */

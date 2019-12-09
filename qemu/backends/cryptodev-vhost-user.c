@@ -22,6 +22,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/boards.h"
 #include "qapi/error.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/error-report.h"

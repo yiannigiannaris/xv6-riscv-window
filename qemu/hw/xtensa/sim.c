@@ -28,7 +28,6 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "cpu.h"
-#include "sysemu/reset.h"
 #include "sysemu/sysemu.h"
 #include "hw/boards.h"
 #include "hw/loader.h"
@@ -37,7 +36,6 @@
 #include "exec/address-spaces.h"
 #include "qemu/error-report.h"
 #include "xtensa_memory.h"
-#include "xtensa_sim.h"
 
 static uint64_t translate_phys_addr(void *opaque, uint64_t addr)
 {
@@ -53,11 +51,12 @@ static void sim_reset(void *opaque)
     cpu_reset(CPU(cpu));
 }
 
-XtensaCPU *xtensa_sim_common_init(MachineState *machine)
+static void xtensa_sim_init(MachineState *machine)
 {
     XtensaCPU *cpu = NULL;
     CPUXtensaState *env = NULL;
     ram_addr_t ram_size = machine->ram_size;
+    const char *kernel_filename = machine->kernel_filename;
     int n;
 
     for (n = 0; n < machine->smp.cpus; n++) {
@@ -89,39 +88,28 @@ XtensaCPU *xtensa_sim_common_init(MachineState *machine)
         xtensa_create_memory_regions(&sysram, "xtensa.sysram",
                                      get_system_memory());
     }
+
     if (serial_hd(0)) {
         xtensa_sim_open_console(serial_hd(0));
     }
-    return cpu;
-}
-
-void xtensa_sim_load_kernel(XtensaCPU *cpu, MachineState *machine)
-{
-    const char *kernel_filename = machine->kernel_filename;
-#ifdef TARGET_WORDS_BIGENDIAN
-    int big_endian = true;
-#else
-    int big_endian = false;
-#endif
-
     if (kernel_filename) {
         uint64_t elf_entry;
         uint64_t elf_lowaddr;
-        int success = load_elf(kernel_filename, NULL, translate_phys_addr, cpu,
-                               &elf_entry, &elf_lowaddr, NULL, big_endian,
-                               EM_XTENSA, 0, 0);
-
+#ifdef TARGET_WORDS_BIGENDIAN
+        int success = load_elf(kernel_filename, NULL,
+                               translate_phys_addr, cpu,
+                               &elf_entry, &elf_lowaddr,
+                               NULL, 1, EM_XTENSA, 0, 0);
+#else
+        int success = load_elf(kernel_filename, NULL,
+                               translate_phys_addr, cpu,
+                               &elf_entry, &elf_lowaddr,
+                               NULL, 0, EM_XTENSA, 0, 0);
+#endif
         if (success > 0) {
-            cpu->env.pc = elf_entry;
+            env->pc = elf_entry;
         }
     }
-}
-
-static void xtensa_sim_init(MachineState *machine)
-{
-    XtensaCPU *cpu = xtensa_sim_common_init(machine);
-
-    xtensa_sim_load_kernel(cpu, machine);
 }
 
 static void xtensa_sim_machine_init(MachineClass *mc)

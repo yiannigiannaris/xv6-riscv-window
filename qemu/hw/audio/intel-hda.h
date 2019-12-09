@@ -1,7 +1,7 @@
 #ifndef HW_INTEL_HDA_H
 #define HW_INTEL_HDA_H
 
-#include "hw/qdev-core.h"
+#include "hw/qdev.h"
 
 /* --------------------------------------------------------------------- */
 /* hda bus                                                               */

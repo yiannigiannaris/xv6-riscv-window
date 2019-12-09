@@ -27,6 +27,7 @@
 
 #include "hw/sysbus.h"
 #include "qemu/timer.h"
+#include "sysemu/sysemu.h"
 
 #define TIM_CR1      0x00
 #define TIM_CR2      0x04

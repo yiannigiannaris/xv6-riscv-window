@@ -14,6 +14,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "sysemu/sysemu.h"
 #include "hw/s390x/sclp.h"
 #include "qemu/module.h"
 #include "hw/s390x/event-facility.h"

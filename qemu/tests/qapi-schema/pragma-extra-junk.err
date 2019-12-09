@@ -1,1 +1,1 @@
-pragma-extra-junk.json:3: invalid 'pragma' directive
+tests/qapi-schema/pragma-extra-junk.json:3: Invalid 'pragma' directive

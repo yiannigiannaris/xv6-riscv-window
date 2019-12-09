@@ -72,12 +72,10 @@ static void qcrypto_secret_decrypt(QCryptoSecret *secret,
                                    size_t *outputlen,
                                    Error **errp)
 {
-    g_autofree uint8_t *key = NULL;
-    g_autofree uint8_t *ciphertext = NULL;
-    g_autofree uint8_t *iv = NULL;
+    uint8_t *key = NULL, *ciphertext = NULL, *iv = NULL;
     size_t keylen, ciphertextlen, ivlen;
-    g_autoptr(QCryptoCipher) aes = NULL;
-    g_autofree uint8_t *plaintext = NULL;
+    QCryptoCipher *aes = NULL;
+    uint8_t *plaintext = NULL;
 
     *output = NULL;
     *outputlen = 0;
@@ -85,27 +83,27 @@ static void qcrypto_secret_decrypt(QCryptoSecret *secret,
     if (qcrypto_secret_lookup(secret->keyid,
                               &key, &keylen,
                               errp) < 0) {
-        return;
+        goto cleanup;
     }
 
     if (keylen != 32) {
         error_setg(errp, "Key should be 32 bytes in length");
-        return;
+        goto cleanup;
     }
 
     if (!secret->iv) {
         error_setg(errp, "IV is required to decrypt secret");
-        return;
+        goto cleanup;
     }
 
     iv = qbase64_decode(secret->iv, -1, &ivlen, errp);
     if (!iv) {
-        return;
+        goto cleanup;
     }
     if (ivlen != 16) {
         error_setg(errp, "IV should be 16 bytes in length not %zu",
                    ivlen);
-        return;
+        goto cleanup;
     }
 
     aes = qcrypto_cipher_new(QCRYPTO_CIPHER_ALG_AES_256,
@@ -113,11 +111,11 @@ static void qcrypto_secret_decrypt(QCryptoSecret *secret,
                              key, keylen,
                              errp);
     if (!aes) {
-        return;
+        goto cleanup;
     }
 
     if (qcrypto_cipher_setiv(aes, iv, ivlen, errp) < 0) {
-        return;
+        goto cleanup;
     }
 
     if (secret->format == QCRYPTO_SECRET_FORMAT_BASE64) {
@@ -126,7 +124,7 @@ static void qcrypto_secret_decrypt(QCryptoSecret *secret,
                                     &ciphertextlen,
                                     errp);
         if (!ciphertext) {
-            return;
+            goto cleanup;
         }
         plaintext = g_new0(uint8_t, ciphertextlen + 1);
     } else {
@@ -138,7 +136,8 @@ static void qcrypto_secret_decrypt(QCryptoSecret *secret,
                                plaintext,
                                ciphertextlen,
                                errp) < 0) {
-        return;
+        plaintext = NULL;
+        goto cleanup;
     }
 
     if (plaintext[ciphertextlen - 1] > 16 ||
@@ -146,7 +145,9 @@ static void qcrypto_secret_decrypt(QCryptoSecret *secret,
         error_setg(errp, "Incorrect number of padding bytes (%d) "
                    "found on decrypted data",
                    (int)plaintext[ciphertextlen - 1]);
-        return;
+        g_free(plaintext);
+        plaintext = NULL;
+        goto cleanup;
     }
 
     /* Even though plaintext may contain arbitrary NUL
@@ -155,8 +156,14 @@ static void qcrypto_secret_decrypt(QCryptoSecret *secret,
     ciphertextlen -= plaintext[ciphertextlen - 1];
     plaintext[ciphertextlen] = '\0';
 
-    *output = g_steal_pointer(&plaintext);
+    *output = plaintext;
     *outputlen = ciphertextlen;
+
+ cleanup:
+    g_free(ciphertext);
+    g_free(iv);
+    g_free(key);
+    qcrypto_cipher_free(aes);
 }
 
 

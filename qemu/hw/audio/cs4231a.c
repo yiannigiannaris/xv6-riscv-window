@@ -23,12 +23,11 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "hw/audio/soundhw.h"
 #include "audio/audio.h"
-#include "hw/irq.h"
 #include "hw/isa/isa.h"
-#include "hw/qdev-properties.h"
-#include "migration/vmstate.h"
+#include "hw/qdev.h"
 #include "qemu/module.h"
 #include "qemu/timer.h"
 #include "qapi/error.h"
@@ -536,7 +535,7 @@ static int cs_write_audio (CSState *s, int nchan, int dma_pos,
         int copied;
         size_t to_copy;
 
-        to_copy = MIN (temp, left);
+        to_copy = audio_MIN (temp, left);
         if (to_copy > sizeof (tmpbuf)) {
             to_copy = sizeof (tmpbuf);
         }
@@ -579,7 +578,7 @@ static int cs_dma_read (void *opaque, int nchan, int dma_pos, int dma_len)
         till = (s->dregs[Playback_Lower_Base_Count]
             | (s->dregs[Playback_Upper_Base_Count] << 8)) << s->shift;
         till -= s->transferred;
-        copy = MIN (till, copy);
+        copy = audio_MIN (till, copy);
     }
 
     if ((copy <= 0) || (dma_len <= 0)) {
@@ -690,7 +689,6 @@ static int cs4231a_init (ISABus *bus)
 }
 
 static Property cs4231a_properties[] = {
-    DEFINE_AUDIO_PROPERTIES(CSState, card),
     DEFINE_PROP_UINT32 ("iobase",  CSState, port, 0x534),
     DEFINE_PROP_UINT32 ("irq",     CSState, irq,  9),
     DEFINE_PROP_UINT32 ("dma",     CSState, dma,  3),

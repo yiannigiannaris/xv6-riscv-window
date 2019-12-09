@@ -21,13 +21,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "ui/console.h"
 #include "hw/i386/pc.h"
 #include "hw/input/i8042.h"
-#include "hw/qdev-properties.h"
-#include "migration/vmstate.h"
+#include "hw/qdev.h"
 
 /* debug only vmmouse */
 //#define DEBUG_VMMOUSE
@@ -258,7 +257,6 @@ static void vmmouse_reset(DeviceState *d)
     VMMouseState *s = VMMOUSE(d);
 
     s->queue_size = VMMOUSE_QUEUE_SIZE;
-    s->nb_queue = 0;
 
     vmmouse_disable(s);
 }

@@ -19,12 +19,13 @@
  *
  *  You should have received a copy of the GNU General Public License along
  *  with this program; if not, see <http://www.gnu.org/licenses/>.
+ *
  */
 
 #ifndef EXYNOS4210_H
 #define EXYNOS4210_H
 
-#include "hw/sysbus.h"
+#include "exec/memory.h"
 #include "target/arm/cpu-qom.h"
 
 #define EXYNOS4210_NCPUS                    2

@@ -16,7 +16,6 @@
 #include "hw/pci/msi.h"
 #include "hw/pci/shpc.h"
 #include "hw/pci/slotid_cap.h"
-#include "hw/qdev-properties.h"
 
 typedef struct PCIEPCIBridge {
     /*< private >*/

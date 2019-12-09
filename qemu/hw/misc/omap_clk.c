@@ -18,10 +18,8 @@
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-
 #include "qemu/osdep.h"
 #include "hw/hw.h"
-#include "hw/irq.h"
 #include "hw/arm/omap.h"
 
 struct clk {

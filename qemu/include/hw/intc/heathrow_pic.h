@@ -26,8 +26,6 @@
 #ifndef HW_INTC_HEATHROW_PIC_H
 #define HW_INTC_HEATHROW_PIC_H
 
-#include "hw/sysbus.h"
-
 #define TYPE_HEATHROW "heathrow"
 #define HEATHROW(obj) OBJECT_CHECK(HeathrowState, (obj), TYPE_HEATHROW)
 

@@ -15,7 +15,6 @@
 #include "io/channel-socket.h"
 #include "qapi/qobject-input-visitor.h"
 #include "qapi/qapi-visit-sockets.h"
-#include "socket-helpers.h"
 
 static bool quit;
 
@@ -667,7 +666,7 @@ char_socket_addr_to_opt_str(SocketAddress *addr, bool fd_pass,
         char *optstr;
         g_assert(!reconnect);
         if (is_listen) {
-            qio_channel_socket_listen_sync(ioc, addr, 1, &error_abort);
+            qio_channel_socket_listen_sync(ioc, addr, &error_abort);
         } else {
             qio_channel_socket_connect_sync(ioc, addr, &error_abort);
         }
@@ -892,7 +891,7 @@ static void char_socket_client_test(gconstpointer opaque)
      */
     ioc = qio_channel_socket_new();
     g_assert_nonnull(ioc);
-    qio_channel_socket_listen_sync(ioc, config->addr, 1, &error_abort);
+    qio_channel_socket_listen_sync(ioc, config->addr, &error_abort);
     addr = qio_channel_socket_get_local_address(ioc, &error_abort);
     g_assert_nonnull(addr);
 
@@ -1103,7 +1102,7 @@ static void char_socket_server_two_clients_test(gconstpointer opaque)
 }
 
 
-#if defined(HAVE_CHARDEV_SERIAL) && !defined(WIN32)
+#ifdef HAVE_CHARDEV_SERIAL
 static void char_serial_test(void)
 {
     QemuOpts *opts;
@@ -1355,31 +1354,12 @@ static void char_hotswap_test(void)
     g_free(chr_args);
 }
 
-static SocketAddress tcpaddr = {
-    .type = SOCKET_ADDRESS_TYPE_INET,
-    .u.inet.host = (char *)"127.0.0.1",
-    .u.inet.port = (char *)"0",
-};
-#ifndef WIN32
-static SocketAddress unixaddr = {
-    .type = SOCKET_ADDRESS_TYPE_UNIX,
-    .u.q_unix.path = (char *)"test-char.sock",
-};
-#endif
-
 int main(int argc, char **argv)
 {
-    bool has_ipv4, has_ipv6;
-
     qemu_init_main_loop(&error_abort);
     socket_init();
 
     g_test_init(&argc, &argv, NULL);
-
-    if (socket_check_protocol_support(&has_ipv4, &has_ipv6) < 0) {
-        g_printerr("socket_check_protocol_support() failed\n");
-        goto end;
-    }
 
     module_call_init(MODULE_INIT_QOM);
     qemu_add_opts(&qemu_chardev_opts);
@@ -1402,14 +1382,26 @@ int main(int argc, char **argv)
     g_test_add_func("/char/file-fifo", char_file_fifo_test);
 #endif
 
+    SocketAddress tcpaddr = {
+        .type = SOCKET_ADDRESS_TYPE_INET,
+        .u.inet.host = (char *)"127.0.0.1",
+        .u.inet.port = (char *)"0",
+    };
+#ifndef WIN32
+    SocketAddress unixaddr = {
+        .type = SOCKET_ADDRESS_TYPE_UNIX,
+        .u.q_unix.path = (char *)"test-char.sock",
+    };
+#endif
+
 #define SOCKET_SERVER_TEST(name, addr)                                  \
-    static CharSocketServerTestConfig server1 ## name =                 \
+    CharSocketServerTestConfig server1 ## name =                        \
         { addr, false, false };                                         \
-    static CharSocketServerTestConfig server2 ## name =                 \
+    CharSocketServerTestConfig server2 ## name =                        \
         { addr, true, false };                                          \
-    static CharSocketServerTestConfig server3 ## name =                 \
+    CharSocketServerTestConfig server3 ## name =                        \
         { addr, false, true };                                          \
-    static CharSocketServerTestConfig server4 ## name =                 \
+    CharSocketServerTestConfig server4 ## name =                        \
         { addr, true, true };                                           \
     g_test_add_data_func("/char/socket/server/mainloop/" # name,        \
                          &server1 ##name, char_socket_server_test);     \
@@ -1421,17 +1413,17 @@ int main(int argc, char **argv)
                          &server4 ##name, char_socket_server_test)
 
 #define SOCKET_CLIENT_TEST(name, addr)                                  \
-    static CharSocketClientTestConfig client1 ## name =                 \
+    CharSocketClientTestConfig client1 ## name =                        \
         { addr, NULL, false, false };                                   \
-    static CharSocketClientTestConfig client2 ## name =                 \
+    CharSocketClientTestConfig client2 ## name =                        \
         { addr, NULL, true, false };                                    \
-    static CharSocketClientTestConfig client3 ## name =                 \
+    CharSocketClientTestConfig client3 ## name =                        \
         { addr, ",reconnect=1", false };                                \
-    static CharSocketClientTestConfig client4 ## name =                 \
+    CharSocketClientTestConfig client4 ## name =                        \
         { addr, ",reconnect=1", true };                                 \
-    static CharSocketClientTestConfig client5 ## name =                 \
+    CharSocketClientTestConfig client5 ## name =                        \
         { addr, NULL, false, true };                                    \
-    static CharSocketClientTestConfig client6 ## name =                 \
+    CharSocketClientTestConfig client6 ## name =                        \
         { addr, NULL, true, true };                                     \
     g_test_add_data_func("/char/socket/client/mainloop/" # name,        \
                          &client1 ##name, char_socket_client_test);     \
@@ -1446,12 +1438,10 @@ int main(int argc, char **argv)
     g_test_add_data_func("/char/socket/client/wait-conn-fdpass/" # name, \
                          &client6 ##name, char_socket_client_test)
 
-    if (has_ipv4) {
-        SOCKET_SERVER_TEST(tcp, &tcpaddr);
-        SOCKET_CLIENT_TEST(tcp, &tcpaddr);
-        g_test_add_data_func("/char/socket/server/two-clients/tcp", &tcpaddr,
-                             char_socket_server_two_clients_test);
-    }
+    SOCKET_SERVER_TEST(tcp, &tcpaddr);
+    SOCKET_CLIENT_TEST(tcp, &tcpaddr);
+    g_test_add_data_func("/char/socket/server/two-clients/tcp", &tcpaddr,
+                         char_socket_server_two_clients_test);
 #ifndef WIN32
     SOCKET_SERVER_TEST(unix, &unixaddr);
     SOCKET_CLIENT_TEST(unix, &unixaddr);
@@ -1460,12 +1450,11 @@ int main(int argc, char **argv)
 #endif
 
     g_test_add_func("/char/udp", char_udp_test);
-#if defined(HAVE_CHARDEV_SERIAL) && !defined(WIN32)
+#ifdef HAVE_CHARDEV_SERIAL
     g_test_add_func("/char/serial", char_serial_test);
 #endif
     g_test_add_func("/char/hotswap", char_hotswap_test);
     g_test_add_func("/char/websocket", char_websock_test);
 
-end:
     return g_test_run();
 }

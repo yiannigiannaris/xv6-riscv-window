@@ -15,10 +15,9 @@
 
 #include "qemu/osdep.h"
 
-#include "hw/irq.h"
+#include "hw/hw.h"
 #include "hw/pci/pci.h"
 #include "hw/scsi/scsi.h"
-#include "migration/vmstate.h"
 #include "sysemu/dma.h"
 #include "qemu/log.h"
 #include "qemu/module.h"

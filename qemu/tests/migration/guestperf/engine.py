@@ -287,7 +287,7 @@ class Engine(object):
             cmdline = "'" + cmdline + "'"
 
         argv = [
-            "-accel", "kvm",
+            "-machine", "accel=kvm",
             "-cpu", "host",
             "-kernel", self._kernel,
             "-initrd", self._initrd,

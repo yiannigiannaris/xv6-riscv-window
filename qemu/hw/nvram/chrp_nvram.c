@@ -21,6 +21,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/cutils.h"
+#include "hw/hw.h"
 #include "hw/nvram/chrp_nvram.h"
 #include "sysemu/sysemu.h"
 

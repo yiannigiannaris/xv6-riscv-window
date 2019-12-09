@@ -22,7 +22,6 @@
 #include "qemu/error-report.h"
 #include "qemu/module.h"
 #include "hw/usb.h"
-#include "migration/vmstate.h"
 #include "desc.h"
 #include "sysemu/bt.h"
 #include "hw/bt.h"

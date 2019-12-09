@@ -33,6 +33,7 @@
 #include "hw/hw.h"
 #include "hw/sysbus.h"
 #include "sysemu/hw_accel.h"
+#include "sysemu/sysemu.h"
 #include "e500.h"
 
 #define MAX_CPUS 32

@@ -15,13 +15,11 @@
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bus.h"
 #include "hw/pci/pci_host.h"
-#include "hw/qdev-properties.h"
 #include "hw/pci/pci_bridge.h"
 #include "qemu/range.h"
 #include "qemu/error-report.h"
 #include "qemu/module.h"
 #include "sysemu/numa.h"
-#include "hw/boards.h"
 
 #define TYPE_PXB_BUS "pxb-bus"
 #define PXB_BUS(obj) OBJECT_CHECK(PXBBus, (obj), TYPE_PXB_BUS)
@@ -214,15 +212,9 @@ static void pxb_dev_realize_common(PCIDevice *dev, bool pcie, Error **errp)
     PCIBus *bus;
     const char *dev_name = NULL;
     Error *local_err = NULL;
-    MachineState *ms = MACHINE(qdev_get_machine());
-
-    if (ms->numa_state == NULL) {
-        error_setg(errp, "NUMA is not supported by this machine-type");
-        return;
-    }
 
     if (pxb->numa_node != NUMA_NODE_UNASSIGNED &&
-        pxb->numa_node >= ms->numa_state->num_nodes) {
+        pxb->numa_node >= nb_numa_nodes) {
         error_setg(errp, "Illegal numa node %d", pxb->numa_node);
         return;
     }

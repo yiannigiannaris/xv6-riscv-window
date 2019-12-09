@@ -1,1 +1,1 @@
-doc-bad-alternate-member.json:3: documented members 'aa', 'bb' do not exist
+tests/qapi-schema/doc-bad-alternate-member.json:3: The following documented members are not in the declaration: aa, bb

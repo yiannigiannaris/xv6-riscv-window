@@ -4,7 +4,6 @@
 #include "hw/mem/pc-dimm.h"
 #include "hw/boards.h"
 #include "hw/qdev-core.h"
-#include "migration/vmstate.h"
 #include "trace.h"
 #include "qapi/error.h"
 #include "qapi/qapi-events-misc.h"
@@ -30,7 +29,12 @@
 #define MEMORY_SLOT_PROXIMITY_METHOD "MPXM"
 #define MEMORY_SLOT_EJECT_METHOD     "MEJ0"
 #define MEMORY_SLOT_NOTIFY_METHOD    "MTFY"
+#define MEMORY_SLOT_SCAN_METHOD      "MSCN"
 #define MEMORY_HOTPLUG_DEVICE        "MHPD"
+#define MEMORY_HOTPLUG_IO_LEN         24
+#define MEMORY_DEVICES_CONTAINER     "\\_SB.MHPC"
+
+static uint16_t memhp_io_base;
 
 static ACPIOSTInfo *acpi_memory_device_status(int slot, MemStatus *mdev)
 {
@@ -205,7 +209,7 @@ static const MemoryRegionOps acpi_memory_hotplug_ops = {
 };
 
 void acpi_memory_hotplug_init(MemoryRegion *as, Object *owner,
-                              MemHotplugState *state, hwaddr io_base)
+                              MemHotplugState *state, uint16_t io_base)
 {
     MachineState *machine = MACHINE(qdev_get_machine());
 
@@ -214,10 +218,12 @@ void acpi_memory_hotplug_init(MemoryRegion *as, Object *owner,
         return;
     }
 
+    assert(!memhp_io_base);
+    memhp_io_base = io_base;
     state->devs = g_malloc0(sizeof(*state->devs) * state->dev_count);
     memory_region_init_io(&state->io, owner, &acpi_memory_hotplug_ops, state,
                           "acpi-mem-hotplug", MEMORY_HOTPLUG_IO_LEN);
-    memory_region_add_subregion(as, io_base, &state->io);
+    memory_region_add_subregion(as, memhp_io_base, &state->io);
 }
 
 /**
@@ -336,8 +342,7 @@ const VMStateDescription vmstate_memory_hotplug = {
 
 void build_memory_hotplug_aml(Aml *table, uint32_t nr_mem,
                               const char *res_root,
-                              const char *event_handler_method,
-                              AmlRegionSpace rs, hwaddr memhp_io_base)
+                              const char *event_handler_method)
 {
     int i;
     Aml *ifctx;
@@ -345,6 +350,10 @@ void build_memory_hotplug_aml(Aml *table, uint32_t nr_mem,
     Aml *dev_container;
     Aml *mem_ctrl_dev;
     char *mhp_res_path;
+
+    if (!memhp_io_base) {
+        return;
+    }
 
     mhp_res_path = g_strdup_printf("%s." MEMORY_HOTPLUG_DEVICE, res_root);
     mem_ctrl_dev = aml_device("%s", mhp_res_path);
@@ -356,19 +365,14 @@ void build_memory_hotplug_aml(Aml *table, uint32_t nr_mem,
             aml_name_decl("_UID", aml_string("Memory hotplug resources")));
 
         crs = aml_resource_template();
-        if (rs == AML_SYSTEM_IO) {
-            aml_append(crs,
-                aml_io(AML_DECODE16, memhp_io_base, memhp_io_base, 0,
-                       MEMORY_HOTPLUG_IO_LEN)
-            );
-        } else {
-            aml_append(crs, aml_memory32_fixed(memhp_io_base,
-                            MEMORY_HOTPLUG_IO_LEN, AML_READ_WRITE));
-        }
+        aml_append(crs,
+            aml_io(AML_DECODE16, memhp_io_base, memhp_io_base, 0,
+                   MEMORY_HOTPLUG_IO_LEN)
+        );
         aml_append(mem_ctrl_dev, aml_name_decl("_CRS", crs));
 
         aml_append(mem_ctrl_dev, aml_operation_region(
-            MEMORY_HOTPLUG_IO_REGION, rs,
+            MEMORY_HOTPLUG_IO_REGION, AML_SYSTEM_IO,
             aml_int(memhp_io_base), MEMORY_HOTPLUG_IO_LEN)
         );
 
@@ -712,12 +716,10 @@ void build_memory_hotplug_aml(Aml *table, uint32_t nr_mem,
     }
     aml_append(table, dev_container);
 
-    if (event_handler_method) {
-        method = aml_method(event_handler_method, 0, AML_NOTSERIALIZED);
-        aml_append(method, aml_call0(MEMORY_DEVICES_CONTAINER "."
-                                     MEMORY_SLOT_SCAN_METHOD));
-        aml_append(table, method);
-    }
+    method = aml_method(event_handler_method, 0, AML_NOTSERIALIZED);
+    aml_append(method,
+        aml_call0(MEMORY_DEVICES_CONTAINER "." MEMORY_SLOT_SCAN_METHOD));
+    aml_append(table, method);
 
     g_free(mhp_res_path);
 }

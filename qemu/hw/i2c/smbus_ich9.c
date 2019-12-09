@@ -21,10 +21,11 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "hw/i2c/pm_smbus.h"
 #include "hw/pci/pci.h"
-#include "migration/vmstate.h"
 #include "qemu/module.h"
+#include "sysemu/sysemu.h"
 
 #include "hw/i386/ich9.h"
 

@@ -189,6 +189,7 @@ static void spr_read_decr(DisasContext *ctx, int gprn, int sprn)
     }
     gen_helper_load_decr(cpu_gpr[gprn], cpu_env);
     if (tb_cflags(ctx->base.tb) & CF_USE_ICOUNT) {
+        gen_io_end();
         gen_stop_exception(ctx);
     }
 }
@@ -200,6 +201,7 @@ static void spr_write_decr(DisasContext *ctx, int sprn, int gprn)
     }
     gen_helper_store_decr(cpu_env, cpu_gpr[gprn]);
     if (tb_cflags(ctx->base.tb) & CF_USE_ICOUNT) {
+        gen_io_end();
         gen_stop_exception(ctx);
     }
 }
@@ -8196,17 +8198,6 @@ static void gen_spr_power8_pspb(CPUPPCState *env)
                      KVM_REG_PPC_PSPB, 0);
 }
 
-static void gen_spr_power8_dpdes(CPUPPCState *env)
-{
-#if !defined(CONFIG_USER_ONLY)
-    /* Directed Privileged Door-bell Exception State, used for IPI */
-    spr_register(env, SPR_DPDES, "DPDES",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 &spr_read_generic, SPR_NOACCESS,
-                 0x00000000);
-#endif
-}
-
 static void gen_spr_power8_ic(CPUPPCState *env)
 {
 #if !defined(CONFIG_USER_ONLY)
@@ -8638,7 +8629,6 @@ static void init_proc_POWER8(CPUPPCState *env)
     gen_spr_power8_pmu_user(env);
     gen_spr_power8_tm(env);
     gen_spr_power8_pspb(env);
-    gen_spr_power8_dpdes(env);
     gen_spr_vtb(env);
     gen_spr_power8_ic(env);
     gen_spr_power8_book4(env);
@@ -8769,7 +8759,6 @@ POWERPC_FAMILY(POWER8)(ObjectClass *oc, void *data)
     pcc->handle_mmu_fault = ppc_hash64_handle_mmu_fault;
     pcc->hash64_opts = &ppc_hash64_opts_POWER7;
     pcc->lrg_decr_bits = 32;
-    pcc->n_host_threads = 8;
 #endif
     pcc->excp_model = POWERPC_EXCP_POWER8;
     pcc->bus_model = PPC_FLAGS_INPUT_POWER7;
@@ -8828,7 +8817,6 @@ static void init_proc_POWER9(CPUPPCState *env)
     gen_spr_power8_pmu_user(env);
     gen_spr_power8_tm(env);
     gen_spr_power8_pspb(env);
-    gen_spr_power8_dpdes(env);
     gen_spr_vtb(env);
     gen_spr_power8_ic(env);
     gen_spr_power8_book4(env);
@@ -8981,7 +8969,6 @@ POWERPC_FAMILY(POWER9)(ObjectClass *oc, void *data)
     pcc->hash64_opts = &ppc_hash64_opts_POWER7;
     pcc->radix_page_info = &POWER9_radix_page_info;
     pcc->lrg_decr_bits = 56;
-    pcc->n_host_threads = 4;
 #endif
     pcc->excp_model = POWERPC_EXCP_POWER9;
     pcc->bus_model = PPC_FLAGS_INPUT_POWER9;
@@ -9453,13 +9440,14 @@ static void fix_opcode_tables(opc_handler_t **ppc_opcodes)
 static void create_ppc_opcodes(PowerPCCPU *cpu, Error **errp)
 {
     PowerPCCPUClass *pcc = POWERPC_CPU_GET_CLASS(cpu);
+    CPUPPCState *env = &cpu->env;
     opcode_t *opc;
 
-    fill_new_table(cpu->opcodes, PPC_CPU_OPCODES_LEN);
+    fill_new_table(env->opcodes, PPC_CPU_OPCODES_LEN);
     for (opc = opcodes; opc < &opcodes[ARRAY_SIZE(opcodes)]; opc++) {
         if (((opc->handler.type & pcc->insns_flags) != 0) ||
             ((opc->handler.type2 & pcc->insns_flags2) != 0)) {
-            if (register_insn(cpu->opcodes, opc) < 0) {
+            if (register_insn(env->opcodes, opc) < 0) {
                 error_setg(errp, "ERROR initializing PowerPC instruction "
                            "0x%02x 0x%02x 0x%02x", opc->opc1, opc->opc2,
                            opc->opc3);
@@ -9467,7 +9455,7 @@ static void create_ppc_opcodes(PowerPCCPU *cpu, Error **errp)
             }
         }
     }
-    fix_opcode_tables(cpu->opcodes);
+    fix_opcode_tables(env->opcodes);
     fflush(stdout);
     fflush(stderr);
 }
@@ -10035,6 +10023,7 @@ static void ppc_cpu_unrealize(DeviceState *dev, Error **errp)
 {
     PowerPCCPU *cpu = POWERPC_CPU(dev);
     PowerPCCPUClass *pcc = POWERPC_CPU_GET_CLASS(cpu);
+    CPUPPCState *env = &cpu->env;
     Error *local_err = NULL;
     opc_handler_t **table, **table_2;
     int i, j, k;
@@ -10046,11 +10035,11 @@ static void ppc_cpu_unrealize(DeviceState *dev, Error **errp)
     }
 
     for (i = 0; i < PPC_CPU_OPCODES_LEN; i++) {
-        if (cpu->opcodes[i] == &invalid_handler) {
+        if (env->opcodes[i] == &invalid_handler) {
             continue;
         }
-        if (is_indirect_opcode(cpu->opcodes[i])) {
-            table = ind_table(cpu->opcodes[i]);
+        if (is_indirect_opcode(env->opcodes[i])) {
+            table = ind_table(env->opcodes[i]);
             for (j = 0; j < PPC_CPU_INDIRECT_OPCODES_LEN; j++) {
                 if (table[j] == &invalid_handler) {
                     continue;
@@ -10068,7 +10057,7 @@ static void ppc_cpu_unrealize(DeviceState *dev, Error **errp)
                                              ~PPC_INDIRECT));
                 }
             }
-            g_free((opc_handler_t *)((uintptr_t)cpu->opcodes[i] &
+            g_free((opc_handler_t *)((uintptr_t)env->opcodes[i] &
                 ~PPC_INDIRECT));
         }
     }
@@ -10462,10 +10451,6 @@ static void ppc_cpu_reset(CPUState *s)
     s->exception_index = POWERPC_EXCP_NONE;
     env->error_code = 0;
 
-    /* tininess for underflow is detected before rounding */
-    set_float_detect_tininess(float_tininess_before_rounding,
-                              &env->fp_status);
-
     for (i = 0; i < ARRAY_SIZE(env->spr_cb); i++) {
         ppc_spr_t *spr = &env->spr_cb[i];
 
@@ -10485,28 +10470,6 @@ static bool ppc_cpu_is_big_endian(CPUState *cs)
     cpu_synchronize_state(cs);
 
     return !msr_le;
-}
-
-static void ppc_cpu_exec_enter(CPUState *cs)
-{
-    PowerPCCPU *cpu = POWERPC_CPU(cs);
-
-    if (cpu->vhyp) {
-        PPCVirtualHypervisorClass *vhc =
-            PPC_VIRTUAL_HYPERVISOR_GET_CLASS(cpu->vhyp);
-        vhc->cpu_exec_enter(cpu->vhyp, cpu);
-    }
-}
-
-static void ppc_cpu_exec_exit(CPUState *cs)
-{
-    PowerPCCPU *cpu = POWERPC_CPU(cs);
-
-    if (cpu->vhyp) {
-        PPCVirtualHypervisorClass *vhc =
-            PPC_VIRTUAL_HYPERVISOR_GET_CLASS(cpu->vhyp);
-        vhc->cpu_exec_exit(cpu->vhyp, cpu);
-    }
 }
 #endif
 
@@ -10661,11 +10624,6 @@ static void ppc_cpu_class_init(ObjectClass *oc, void *data)
     cc->tcg_initialize = ppc_translate_init;
     cc->tlb_fill = ppc_cpu_tlb_fill;
 #endif
-#ifndef CONFIG_USER_ONLY
-    cc->cpu_exec_enter = ppc_cpu_exec_enter;
-    cc->cpu_exec_exit = ppc_cpu_exec_exit;
-#endif
-
     cc->disas_set_info = ppc_disas_set_info;
 
     dc->fw_name = "PowerPC,UNKNOWN";

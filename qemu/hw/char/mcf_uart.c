@@ -7,11 +7,10 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/irq.h"
+#include "hw/hw.h"
 #include "hw/sysbus.h"
 #include "qemu/module.h"
 #include "hw/m68k/mcf.h"
-#include "hw/qdev-properties.h"
 #include "chardev/char-fe.h"
 
 typedef struct {

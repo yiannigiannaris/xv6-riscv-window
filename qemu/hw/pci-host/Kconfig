@@ -2,9 +2,8 @@ config PAM
     bool
 
 config PREP_PCI
-    bool
     select PCI
-    select OR_IRQ
+    bool
 
 config GRACKLE_PCI
     select PCI
@@ -28,10 +27,11 @@ config PCI_SABRE
     select PCI
     bool
 
-config PCI_I440FX
+config PCI_PIIX
     bool
     select PCI
     select PAM
+    select ISA_BUS
 
 config PCI_EXPRESS_Q35
     bool

@@ -13,12 +13,10 @@
 #include "qapi/error.h"
 #include "qemu/iov.h"
 #include "qemu/module.h"
-#include "qemu/timer.h"
+#include "hw/qdev.h"
 #include "hw/virtio/virtio.h"
-#include "hw/qdev-properties.h"
 #include "hw/virtio/virtio-rng.h"
 #include "sysemu/rng.h"
-#include "sysemu/runstate.h"
 #include "qom/object_interfaces.h"
 #include "trace.h"
 
@@ -192,24 +190,27 @@ static void virtio_rng_device_realize(DeviceState *dev, Error **errp)
     }
 
     if (vrng->conf.rng == NULL) {
-        Object *default_backend = object_new(TYPE_RNG_BUILTIN);
+        vrng->conf.default_backend = RNG_RANDOM(object_new(TYPE_RNG_RANDOM));
 
-        user_creatable_complete(USER_CREATABLE(default_backend),
+        user_creatable_complete(USER_CREATABLE(vrng->conf.default_backend),
                                 &local_err);
         if (local_err) {
             error_propagate(errp, local_err);
-            object_unref(default_backend);
+            object_unref(OBJECT(vrng->conf.default_backend));
             return;
         }
 
-        object_property_add_child(OBJECT(dev), "default-backend",
-                                  default_backend, &error_abort);
+        object_property_add_child(OBJECT(dev),
+                                  "default-backend",
+                                  OBJECT(vrng->conf.default_backend),
+                                  NULL);
 
         /* The child property took a reference, we can safely drop ours now */
-        object_unref(default_backend);
+        object_unref(OBJECT(vrng->conf.default_backend));
 
-        object_property_set_link(OBJECT(dev), default_backend,
-                                 "rng", &error_abort);
+        object_property_set_link(OBJECT(dev),
+                                 OBJECT(vrng->conf.default_backend),
+                                 "rng", NULL);
     }
 
     vrng->rng = vrng->conf.rng;
@@ -238,7 +239,6 @@ static void virtio_rng_device_unrealize(DeviceState *dev, Error **errp)
     qemu_del_vm_change_state_handler(vrng->vmstate);
     timer_del(vrng->rate_limit_timer);
     timer_free(vrng->rate_limit_timer);
-    virtio_del_queue(vdev, 0);
     virtio_cleanup(vdev);
 }
 

@@ -19,6 +19,7 @@
 #include "qapi/error.h"
 #include "exec/address-spaces.h"
 #include "hw/boards.h"
+#include "hw/qdev-properties.h"
 #include "cpu.h"
 #include "boot.h"
 

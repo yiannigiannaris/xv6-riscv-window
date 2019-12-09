@@ -24,12 +24,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
 #include "qemu/osdep.h"
 #include "qemu/log.h"
 #include "chardev/char.h"
-#include "hw/irq.h"
-#include "migration/vmstate.h"
+#include "hw/hw.h"
 #include "net/can_emu.h"
 
 #include "can_sja1000.h"

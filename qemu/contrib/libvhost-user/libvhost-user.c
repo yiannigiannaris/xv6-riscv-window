@@ -94,11 +94,6 @@ bool vu_has_feature(VuDev *dev,
     return has_feature(dev->features, fbit);
 }
 
-static inline bool vu_has_protocol_feature(VuDev *dev, unsigned int fbit)
-{
-    return has_feature(dev->protocol_features, fbit);
-}
-
 static const char *
 vu_request_to_string(unsigned int req)
 {
@@ -956,7 +951,8 @@ vu_check_queue_inflights(VuDev *dev, VuVirtq *vq)
 {
     int i = 0;
 
-    if (!vu_has_protocol_feature(dev, VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
+    if (!has_feature(dev->protocol_features,
+        VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
         return 0;
     }
 
@@ -992,7 +988,7 @@ vu_check_queue_inflights(VuDev *dev, VuVirtq *vq)
     vq->shadow_avail_idx = vq->last_avail_idx = vq->inuse + vq->used_idx;
 
     if (vq->inuse) {
-        vq->resubmit_list = calloc(vq->inuse, sizeof(VuVirtqInflightDesc));
+        vq->resubmit_list = malloc(sizeof(VuVirtqInflightDesc) * vq->inuse);
         if (!vq->resubmit_list) {
             return -1;
         }
@@ -1101,7 +1097,8 @@ bool vu_set_queue_host_notifier(VuDev *dev, VuVirtq *vq, int fd,
 
     vmsg.fd_num = fd_num;
 
-    if (!vu_has_protocol_feature(dev, VHOST_USER_PROTOCOL_F_SLAVE_SEND_FD)) {
+    if (!has_feature(dev->protocol_features,
+                     VHOST_USER_PROTOCOL_F_SLAVE_SEND_FD)) {
         return false;
     }
 
@@ -2194,7 +2191,8 @@ vu_queue_map_desc(VuDev *dev, VuVirtq *vq, unsigned int idx, size_t sz)
 static int
 vu_queue_inflight_get(VuDev *dev, VuVirtq *vq, int desc_idx)
 {
-    if (!vu_has_protocol_feature(dev, VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
+    if (!has_feature(dev->protocol_features,
+        VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
         return 0;
     }
 
@@ -2211,7 +2209,8 @@ vu_queue_inflight_get(VuDev *dev, VuVirtq *vq, int desc_idx)
 static int
 vu_queue_inflight_pre_put(VuDev *dev, VuVirtq *vq, int desc_idx)
 {
-    if (!vu_has_protocol_feature(dev, VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
+    if (!has_feature(dev->protocol_features,
+        VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
         return 0;
     }
 
@@ -2227,7 +2226,8 @@ vu_queue_inflight_pre_put(VuDev *dev, VuVirtq *vq, int desc_idx)
 static int
 vu_queue_inflight_post_put(VuDev *dev, VuVirtq *vq, int desc_idx)
 {
-    if (!vu_has_protocol_feature(dev, VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
+    if (!has_feature(dev->protocol_features,
+        VHOST_USER_PROTOCOL_F_INFLIGHT_SHMFD)) {
         return 0;
     }
 

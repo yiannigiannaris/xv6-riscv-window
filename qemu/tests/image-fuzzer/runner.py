@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # Tool for running fuzz tests
 #
@@ -18,6 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+from __future__ import print_function
 import sys
 import os
 import signal
@@ -27,7 +28,7 @@ import shutil
 from itertools import count
 import time
 import getopt
-import io
+import StringIO
 import resource
 
 try:
@@ -79,8 +80,7 @@ def run_app(fd, q_args):
     devnull = open('/dev/null', 'r+')
     process = subprocess.Popen(q_args, stdin=devnull,
                                stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE,
-                               errors='replace')
+                               stderr=subprocess.PIPE)
     try:
         out, err = process.communicate()
         signal.alarm(0)
@@ -159,7 +159,7 @@ class TestEnv(object):
             os.makedirs(self.current_dir)
         except OSError as e:
             print("Error: The working directory '%s' cannot be used. Reason: %s"\
-                % (self.work_dir, e.strerror), file=sys.stderr)
+                % (self.work_dir, e[1]), file=sys.stderr)
             raise TestException
         self.log = open(os.path.join(self.current_dir, "test.log"), "w")
         self.parent_log = open(run_log, "a")
@@ -183,7 +183,7 @@ class TestEnv(object):
                                            MAX_BACKING_FILE_SIZE) * (1 << 20)
         cmd = self.qemu_img + ['create', '-f', backing_file_fmt,
                                backing_file_name, str(backing_file_size)]
-        temp_log = io.StringIO()
+        temp_log = StringIO.StringIO()
         retcode = run_app(temp_log, cmd)
         if retcode == 0:
             temp_log.close()
@@ -240,13 +240,13 @@ class TestEnv(object):
                            "Backing file: %s\n" \
                            % (self.seed, " ".join(current_cmd),
                               self.current_dir, backing_file_name)
-            temp_log = io.StringIO()
+            temp_log = StringIO.StringIO()
             try:
                 retcode = run_app(temp_log, current_cmd)
             except OSError as e:
                 multilog("%sError: Start of '%s' failed. Reason: %s\n\n"
                          % (test_summary, os.path.basename(current_cmd[0]),
-                            e.strerror),
+                            e[1]),
                          sys.stderr, self.log, self.parent_log)
                 raise TestException
 

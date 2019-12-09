@@ -1,2 +1,1 @@
-union-empty.json: In union 'Union':
-union-empty.json:2: union has no branches
+tests/qapi-schema/union-empty.json:2: Union 'Union' cannot have empty 'data'

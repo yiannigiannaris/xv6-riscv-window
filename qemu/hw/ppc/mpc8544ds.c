@@ -11,6 +11,7 @@
 
 #include "qemu/osdep.h"
 #include "e500.h"
+#include "hw/boards.h"
 #include "sysemu/device_tree.h"
 #include "hw/ppc/openpic.h"
 #include "qemu/error-report.h"

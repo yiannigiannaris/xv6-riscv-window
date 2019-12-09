@@ -32,6 +32,8 @@
 #include "exec/cpu-defs.h"
 #include "xtensa-isa.h"
 
+#define ALIGNED_ONLY
+
 /* Xtensa processors have a weak memory model */
 #define TCG_GUEST_DEFAULT_MO      (0)
 
@@ -673,9 +675,6 @@ static inline MemoryRegion *xtensa_get_er_region(CPUXtensaState *env)
 {
     return env->system_er;
 }
-#else
-void xtensa_set_abi_call0(void);
-bool xtensa_abi_call0(void);
 #endif
 
 static inline uint32_t xtensa_replicate_windowstart(CPUXtensaState *env)

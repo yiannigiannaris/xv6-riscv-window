@@ -1,6 +1,7 @@
 #ifndef QEMU_HID_H
 #define QEMU_HID_H
 
+#include "migration/vmstate.h"
 #include "ui/input.h"
 
 #define HID_MOUSE     1

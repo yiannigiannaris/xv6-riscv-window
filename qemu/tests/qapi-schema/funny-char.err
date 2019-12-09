@@ -1,1 +1,1 @@
-funny-char.json:2:36: stray ';'
+tests/qapi-schema/funny-char.json:2:36: Stray ";"

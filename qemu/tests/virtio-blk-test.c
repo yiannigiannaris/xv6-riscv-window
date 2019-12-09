@@ -9,7 +9,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "libqtest-single.h"
+#include "libqtest.h"
 #include "qemu/bswap.h"
 #include "qemu/module.h"
 #include "standard-headers/linux/virtio_blk.h"
@@ -113,18 +113,20 @@ static uint64_t virtio_blk_request(QGuestAllocator *alloc, QVirtioDevice *d,
     return addr;
 }
 
-/* Returns the request virtqueue so the caller can perform further tests */
-static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
+static void test_basic(QVirtioDevice *dev, QGuestAllocator *alloc,
+                       QVirtQueue *vq)
 {
     QVirtioBlkReq req;
     uint64_t req_addr;
     uint64_t capacity;
-    uint64_t features;
+    uint32_t features;
     uint32_t free_head;
     uint8_t status;
     char *data;
-    QTestState *qts = global_qtest;
-    QVirtQueue *vq;
+
+    capacity = qvirtio_config_readq(dev, 0);
+
+    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
 
     features = qvirtio_get_features(dev);
     features = features & ~(QVIRTIO_F_BAD_FEATURE |
@@ -132,11 +134,6 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
                     (1u << VIRTIO_RING_F_EVENT_IDX) |
                     (1u << VIRTIO_BLK_F_SCSI));
     qvirtio_set_features(dev, features);
-
-    capacity = qvirtio_config_readq(dev, 0);
-    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
-
-    vq = qvirtqueue_setup(dev, alloc, 0);
 
     qvirtio_set_driver_ok(dev);
 
@@ -152,14 +149,13 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
     g_free(req.data);
 
-    free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 16, 512, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
+    free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 512, false, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
 
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    qvirtqueue_kick(dev, vq, free_head);
 
-    qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
-                           QVIRTIO_BLK_TIMEOUT_US);
+    qvirtio_wait_used_elem(dev, vq, free_head, NULL, QVIRTIO_BLK_TIMEOUT_US);
     status = readb(req_addr + 528);
     g_assert_cmpint(status, ==, 0);
 
@@ -175,14 +171,13 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
     g_free(req.data);
 
-    free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 16, 512, true, true);
-    qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
+    free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 512, true, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
 
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    qvirtqueue_kick(dev, vq, free_head);
 
-    qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
-                           QVIRTIO_BLK_TIMEOUT_US);
+    qvirtio_wait_used_elem(dev, vq, free_head, NULL, QVIRTIO_BLK_TIMEOUT_US);
     status = readb(req_addr + 528);
     g_assert_cmpint(status, ==, 0);
 
@@ -211,14 +206,13 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
         req_addr = virtio_blk_request(alloc, dev, &req, sizeof(dwz_hdr));
 
-        free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-        qvirtqueue_add(qts, vq, req_addr + 16, sizeof(dwz_hdr), false, true);
-        qvirtqueue_add(qts, vq, req_addr + 16 + sizeof(dwz_hdr), 1, true,
-                       false);
+        free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+        qvirtqueue_add(vq, req_addr + 16, sizeof(dwz_hdr), false, true);
+        qvirtqueue_add(vq, req_addr + 16 + sizeof(dwz_hdr), 1, true, false);
 
-        qvirtqueue_kick(qts, dev, vq, free_head);
+        qvirtqueue_kick(dev, vq, free_head);
 
-        qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+        qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                                QVIRTIO_BLK_TIMEOUT_US);
         status = readb(req_addr + 16 + sizeof(dwz_hdr));
         g_assert_cmpint(status, ==, 0);
@@ -235,13 +229,13 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
         g_free(req.data);
 
-        free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-        qvirtqueue_add(qts, vq, req_addr + 16, 512, true, true);
-        qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
+        free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+        qvirtqueue_add(vq, req_addr + 16, 512, true, true);
+        qvirtqueue_add(vq, req_addr + 528, 1, true, false);
 
-        qvirtqueue_kick(qts, dev, vq, free_head);
+        qvirtqueue_kick(dev, vq, free_head);
 
-        qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+        qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                                QVIRTIO_BLK_TIMEOUT_US);
         status = readb(req_addr + 528);
         g_assert_cmpint(status, ==, 0);
@@ -269,13 +263,13 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
         req_addr = virtio_blk_request(alloc, dev, &req, sizeof(dwz_hdr));
 
-        free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-        qvirtqueue_add(qts, vq, req_addr + 16, sizeof(dwz_hdr), false, true);
-        qvirtqueue_add(qts, vq, req_addr + 16 + sizeof(dwz_hdr), 1, true, false);
+        free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+        qvirtqueue_add(vq, req_addr + 16, sizeof(dwz_hdr), false, true);
+        qvirtqueue_add(vq, req_addr + 16 + sizeof(dwz_hdr), 1, true, false);
 
-        qvirtqueue_kick(qts, dev, vq, free_head);
+        qvirtqueue_kick(dev, vq, free_head);
 
-        qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+        qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                                QVIRTIO_BLK_TIMEOUT_US);
         status = readb(req_addr + 16 + sizeof(dwz_hdr));
         g_assert_cmpint(status, ==, 0);
@@ -296,11 +290,11 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
         g_free(req.data);
 
-        free_head = qvirtqueue_add(qts, vq, req_addr, 528, false, true);
-        qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
-        qvirtqueue_kick(qts, dev, vq, free_head);
+        free_head = qvirtqueue_add(vq, req_addr, 528, false, true);
+        qvirtqueue_add(vq, req_addr + 528, 1, true, false);
+        qvirtqueue_kick(dev, vq, free_head);
 
-        qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+        qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                                QVIRTIO_BLK_TIMEOUT_US);
         status = readb(req_addr + 528);
         g_assert_cmpint(status, ==, 0);
@@ -317,12 +311,12 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
         g_free(req.data);
 
-        free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-        qvirtqueue_add(qts, vq, req_addr + 16, 513, true, false);
+        free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+        qvirtqueue_add(vq, req_addr + 16, 513, true, false);
 
-        qvirtqueue_kick(qts, dev, vq, free_head);
+        qvirtqueue_kick(dev, vq, free_head);
 
-        qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+        qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                                QVIRTIO_BLK_TIMEOUT_US);
         status = readb(req_addr + 528);
         g_assert_cmpint(status, ==, 0);
@@ -334,16 +328,14 @@ static QVirtQueue *test_basic(QVirtioDevice *dev, QGuestAllocator *alloc)
 
         guest_free(alloc, req_addr);
     }
-
-    return vq;
 }
 
 static void basic(void *obj, void *data, QGuestAllocator *t_alloc)
 {
     QVirtioBlk *blk_if = obj;
     QVirtQueue *vq;
-
-    vq = test_basic(blk_if->vdev, t_alloc);
+    vq = qvirtqueue_setup(blk_if->vdev, t_alloc, 0);
+    test_basic(blk_if->vdev, t_alloc, vq);
     qvirtqueue_cleanup(blk_if->vdev->bus, vq, t_alloc);
 
 }
@@ -357,11 +349,13 @@ static void indirect(void *obj, void *u_data, QGuestAllocator *t_alloc)
     QVRingIndirectDesc *indirect;
     uint64_t req_addr;
     uint64_t capacity;
-    uint64_t features;
+    uint32_t features;
     uint32_t free_head;
     uint8_t status;
     char *data;
-    QTestState *qts = global_qtest;
+
+    capacity = qvirtio_config_readq(dev, 0);
+    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
 
     features = qvirtio_get_features(dev);
     g_assert_cmphex(features & (1u << VIRTIO_RING_F_INDIRECT_DESC), !=, 0);
@@ -369,9 +363,6 @@ static void indirect(void *obj, void *u_data, QGuestAllocator *t_alloc)
                             (1u << VIRTIO_RING_F_EVENT_IDX) |
                             (1u << VIRTIO_BLK_F_SCSI));
     qvirtio_set_features(dev, features);
-
-    capacity = qvirtio_config_readq(dev, 0);
-    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
 
     vq = qvirtqueue_setup(dev, t_alloc, 0);
     qvirtio_set_driver_ok(dev);
@@ -387,13 +378,13 @@ static void indirect(void *obj, void *u_data, QGuestAllocator *t_alloc)
 
     g_free(req.data);
 
-    indirect = qvring_indirect_desc_setup(qts, dev, t_alloc, 2);
-    qvring_indirect_desc_add(dev, qts, indirect, req_addr, 528, false);
-    qvring_indirect_desc_add(dev, qts, indirect, req_addr + 528, 1, true);
-    free_head = qvirtqueue_add_indirect(qts, vq, indirect);
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    indirect = qvring_indirect_desc_setup(dev, t_alloc, 2);
+    qvring_indirect_desc_add(indirect, req_addr, 528, false);
+    qvring_indirect_desc_add(indirect, req_addr + 528, 1, true);
+    free_head = qvirtqueue_add_indirect(vq, indirect);
+    qvirtqueue_kick(dev, vq, free_head);
 
-    qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+    qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
     status = readb(req_addr + 528);
     g_assert_cmpint(status, ==, 0);
@@ -412,13 +403,13 @@ static void indirect(void *obj, void *u_data, QGuestAllocator *t_alloc)
 
     g_free(req.data);
 
-    indirect = qvring_indirect_desc_setup(qts, dev, t_alloc, 2);
-    qvring_indirect_desc_add(dev, qts, indirect, req_addr, 16, false);
-    qvring_indirect_desc_add(dev, qts, indirect, req_addr + 16, 513, true);
-    free_head = qvirtqueue_add_indirect(qts, vq, indirect);
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    indirect = qvring_indirect_desc_setup(dev, t_alloc, 2);
+    qvring_indirect_desc_add(indirect, req_addr, 16, false);
+    qvring_indirect_desc_add(indirect, req_addr + 16, 513, true);
+    free_head = qvirtqueue_add_indirect(vq, indirect);
+    qvirtqueue_kick(dev, vq, free_head);
 
-    qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+    qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
     status = readb(req_addr + 528);
     g_assert_cmpint(status, ==, 0);
@@ -438,15 +429,7 @@ static void config(void *obj, void *data, QGuestAllocator *t_alloc)
     QVirtioBlk *blk_if = obj;
     QVirtioDevice *dev = blk_if->vdev;
     int n_size = TEST_IMAGE_SIZE / 2;
-    uint64_t features;
     uint64_t capacity;
-
-    features = qvirtio_get_features(dev);
-    features = features & ~(QVIRTIO_F_BAD_FEATURE |
-                            (1u << VIRTIO_RING_F_INDIRECT_DESC) |
-                            (1u << VIRTIO_RING_F_EVENT_IDX) |
-                            (1u << VIRTIO_BLK_F_SCSI));
-    qvirtio_set_features(dev, features);
 
     capacity = qvirtio_config_readq(dev, 0);
     g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
@@ -472,13 +455,12 @@ static void msix(void *obj, void *u_data, QGuestAllocator *t_alloc)
     int n_size = TEST_IMAGE_SIZE / 2;
     uint64_t req_addr;
     uint64_t capacity;
-    uint64_t features;
+    uint32_t features;
     uint32_t free_head;
     uint8_t status;
     char *data;
     QOSGraphObject *blk_object = obj;
     QPCIDevice *pci_dev = blk_object->get_driver(blk_object, "pci-device");
-    QTestState *qts = global_qtest;
 
     if (qpci_check_buggy_msi(pci_dev)) {
         return;
@@ -487,15 +469,15 @@ static void msix(void *obj, void *u_data, QGuestAllocator *t_alloc)
     qpci_msix_enable(pdev->pdev);
     qvirtio_pci_set_msix_configuration_vector(pdev, t_alloc, 0);
 
+    capacity = qvirtio_config_readq(dev, 0);
+    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
+
     features = qvirtio_get_features(dev);
     features = features & ~(QVIRTIO_F_BAD_FEATURE |
                             (1u << VIRTIO_RING_F_INDIRECT_DESC) |
                             (1u << VIRTIO_RING_F_EVENT_IDX) |
                             (1u << VIRTIO_BLK_F_SCSI));
     qvirtio_set_features(dev, features);
-
-    capacity = qvirtio_config_readq(dev, 0);
-    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
 
     vq = qvirtqueue_setup(dev, t_alloc, 0);
     qvirtqueue_pci_msix_setup(pdev, (QVirtQueuePCI *)vq, t_alloc, 1);
@@ -522,12 +504,12 @@ static void msix(void *obj, void *u_data, QGuestAllocator *t_alloc)
 
     g_free(req.data);
 
-    free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 16, 512, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 512, false, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
+    qvirtqueue_kick(dev, vq, free_head);
 
-    qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+    qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
 
     status = readb(req_addr + 528);
@@ -545,14 +527,14 @@ static void msix(void *obj, void *u_data, QGuestAllocator *t_alloc)
 
     g_free(req.data);
 
-    free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 16, 512, true, true);
-    qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
+    free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 512, true, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
 
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    qvirtqueue_kick(dev, vq, free_head);
 
 
-    qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+    qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
 
     status = readb(req_addr + 528);
@@ -579,7 +561,7 @@ static void idx(void *obj, void *u_data, QGuestAllocator *t_alloc)
     QVirtioBlkReq req;
     uint64_t req_addr;
     uint64_t capacity;
-    uint64_t features;
+    uint32_t features;
     uint32_t free_head;
     uint32_t write_head;
     uint32_t desc_idx;
@@ -587,7 +569,6 @@ static void idx(void *obj, void *u_data, QGuestAllocator *t_alloc)
     char *data;
     QOSGraphObject *blk_object = obj;
     QPCIDevice *pci_dev = blk_object->get_driver(blk_object, "pci-device");
-    QTestState *qts = global_qtest;
 
     if (qpci_check_buggy_msi(pci_dev)) {
         return;
@@ -596,15 +577,15 @@ static void idx(void *obj, void *u_data, QGuestAllocator *t_alloc)
     qpci_msix_enable(pdev->pdev);
     qvirtio_pci_set_msix_configuration_vector(pdev, t_alloc, 0);
 
+    capacity = qvirtio_config_readq(dev, 0);
+    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
+
     features = qvirtio_get_features(dev);
     features = features & ~(QVIRTIO_F_BAD_FEATURE |
                             (1u << VIRTIO_RING_F_INDIRECT_DESC) |
                             (1u << VIRTIO_F_NOTIFY_ON_EMPTY) |
                             (1u << VIRTIO_BLK_F_SCSI));
     qvirtio_set_features(dev, features);
-
-    capacity = qvirtio_config_readq(dev, 0);
-    g_assert_cmpint(capacity, ==, TEST_IMAGE_SIZE / 512);
 
     vq = qvirtqueue_setup(dev, t_alloc, 0);
     qvirtqueue_pci_msix_setup(pdev, (QVirtQueuePCI *)vq, t_alloc, 1);
@@ -622,12 +603,12 @@ static void idx(void *obj, void *u_data, QGuestAllocator *t_alloc)
 
     g_free(req.data);
 
-    free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 16, 512, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 512, false, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
+    qvirtqueue_kick(dev, vq, free_head);
 
-    qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
+    qvirtio_wait_used_elem(dev, vq, free_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
 
     /* Write request */
@@ -642,15 +623,15 @@ static void idx(void *obj, void *u_data, QGuestAllocator *t_alloc)
     g_free(req.data);
 
     /* Notify after processing the third request */
-    qvirtqueue_set_used_event(qts, vq, 2);
-    free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 16, 512, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    qvirtqueue_set_used_event(vq, 2);
+    free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 512, false, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
+    qvirtqueue_kick(dev, vq, free_head);
     write_head = free_head;
 
     /* No notification expected */
-    status = qvirtio_wait_status_byte_no_isr(qts, dev,
+    status = qvirtio_wait_status_byte_no_isr(dev,
                                              vq, req_addr + 528,
                                              QVIRTIO_BLK_TIMEOUT_US);
     g_assert_cmpint(status, ==, 0);
@@ -667,16 +648,16 @@ static void idx(void *obj, void *u_data, QGuestAllocator *t_alloc)
 
     g_free(req.data);
 
-    free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
-    qvirtqueue_add(qts, vq, req_addr + 16, 512, true, true);
-    qvirtqueue_add(qts, vq, req_addr + 528, 1, true, false);
+    free_head = qvirtqueue_add(vq, req_addr, 16, false, true);
+    qvirtqueue_add(vq, req_addr + 16, 512, true, true);
+    qvirtqueue_add(vq, req_addr + 528, 1, true, false);
 
-    qvirtqueue_kick(qts, dev, vq, free_head);
+    qvirtqueue_kick(dev, vq, free_head);
 
     /* We get just one notification for both requests */
-    qvirtio_wait_used_elem(qts, dev, vq, write_head, NULL,
+    qvirtio_wait_used_elem(dev, vq, write_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
-    g_assert(qvirtqueue_get_buf(qts, vq, &desc_idx, NULL));
+    g_assert(qvirtqueue_get_buf(vq, &desc_idx, NULL));
     g_assert_cmpint(desc_idx, ==, free_head);
 
     status = readb(req_addr + 528);
@@ -702,7 +683,7 @@ static void pci_hotplug(void *obj, void *data, QGuestAllocator *t_alloc)
     QTestState *qts = dev1->pdev->bus->qts;
 
     /* plug secondary disk */
-    qtest_qmp_device_add(qts, "virtio-blk-pci", "drv1",
+    qtest_qmp_device_add("virtio-blk-pci", "drv1",
                          "{'addr': %s, 'drive': 'drive1'}",
                          stringify(PCI_SLOT_HP) ".0");
 
@@ -749,15 +730,16 @@ static void resize(void *obj, void *data, QGuestAllocator *t_alloc)
     int n_size = TEST_IMAGE_SIZE / 2;
     uint64_t capacity;
     QVirtQueue *vq;
-    QTestState *qts = global_qtest;
 
-    vq = test_basic(dev, t_alloc);
+    vq = qvirtqueue_setup(dev, t_alloc, 0);
+
+    test_basic(dev, t_alloc, vq);
 
     qmp_discard_response("{ 'execute': 'block_resize', "
                          " 'arguments': { 'device': 'drive0', "
                          " 'size': %d } }", n_size);
 
-    qvirtio_wait_queue_isr(qts, dev, vq, QVIRTIO_BLK_TIMEOUT_US);
+    qvirtio_wait_queue_isr(dev, vq, QVIRTIO_BLK_TIMEOUT_US);
 
     capacity = qvirtio_config_readq(dev, 0);
     g_assert_cmpint(capacity, ==, n_size / 512);
@@ -771,10 +753,8 @@ static void *virtio_blk_test_setup(GString *cmd_line, void *arg)
     char *tmp_path = drive_create();
 
     g_string_append_printf(cmd_line,
-                           " -drive if=none,id=drive0,file=%s,"
-                           "format=raw,auto-read-only=off "
-                           "-drive if=none,id=drive1,file=null-co://,"
-                           "file.read-zeroes=on,format=raw ",
+                           " -drive if=none,id=drive0,file=%s,format=raw,auto-read-only=off "
+                           "-drive if=none,id=drive1,file=null-co://,format=raw ",
                            tmp_path);
 
     return arg;

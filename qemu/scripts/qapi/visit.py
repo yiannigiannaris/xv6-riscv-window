@@ -14,8 +14,6 @@ See the COPYING file in the top-level directory.
 """
 
 from qapi.common import *
-from qapi.gen import QAPISchemaModularCVisitor, ifcontext
-from qapi.schema import QAPISchemaObjectType
 
 
 def gen_visit_decl(name, scalar=False):

@@ -1076,7 +1076,8 @@ static const char *next_line(const char *s)
 }
 
 static int vmdk_parse_extents(const char *desc, BlockDriverState *bs,
-                              QDict *options, Error **errp)
+                              const char *desc_file_path, QDict *options,
+                              Error **errp)
 {
     int ret;
     int matches;
@@ -1086,7 +1087,6 @@ static int vmdk_parse_extents(const char *desc, BlockDriverState *bs,
     const char *p, *np;
     int64_t sectors = 0;
     int64_t flat_offset;
-    char *desc_file_dir = NULL;
     char *extent_path;
     BdrvChild *extent_file;
     BDRVVmdkState *s = bs->opaque;
@@ -1130,23 +1130,16 @@ static int vmdk_parse_extents(const char *desc, BlockDriverState *bs,
             continue;
         }
 
-        if (path_is_absolute(fname)) {
-            extent_path = g_strdup(fname);
-        } else {
-            if (!desc_file_dir) {
-                desc_file_dir = bdrv_dirname(bs->file->bs, errp);
-                if (!desc_file_dir) {
-                    bdrv_refresh_filename(bs->file->bs);
-                    error_prepend(errp, "Cannot use relative paths with VMDK "
-                                  "descriptor file '%s': ",
-                                  bs->file->bs->filename);
-                    ret = -EINVAL;
-                    goto out;
-                }
-            }
-
-            extent_path = g_strconcat(desc_file_dir, fname, NULL);
+        if (!path_is_absolute(fname) && !path_has_protocol(fname) &&
+            !desc_file_path[0])
+        {
+            bdrv_refresh_filename(bs->file->bs);
+            error_setg(errp, "Cannot use relative extent paths with VMDK "
+                       "descriptor file '%s'", bs->file->bs->filename);
+            return -EINVAL;
         }
+
+        extent_path = path_combine(desc_file_path, fname);
 
         ret = snprintf(extent_opt_prefix, 32, "extents.%d", s->num_extents);
         assert(ret < 32);
@@ -1156,8 +1149,7 @@ static int vmdk_parse_extents(const char *desc, BlockDriverState *bs,
         g_free(extent_path);
         if (local_err) {
             error_propagate(errp, local_err);
-            ret = -EINVAL;
-            goto out;
+            return -EINVAL;
         }
 
         /* save to extents array */
@@ -1168,7 +1160,7 @@ static int vmdk_parse_extents(const char *desc, BlockDriverState *bs,
                             0, 0, 0, 0, 0, &extent, errp);
             if (ret < 0) {
                 bdrv_unref_child(bs, extent_file);
-                goto out;
+                return ret;
             }
             extent->flat_start_offset = flat_offset << 9;
         } else if (!strcmp(type, "SPARSE") || !strcmp(type, "VMFSSPARSE")) {
@@ -1183,27 +1175,24 @@ static int vmdk_parse_extents(const char *desc, BlockDriverState *bs,
             g_free(buf);
             if (ret) {
                 bdrv_unref_child(bs, extent_file);
-                goto out;
+                return ret;
             }
             extent = &s->extents[s->num_extents - 1];
         } else if (!strcmp(type, "SESPARSE")) {
             ret = vmdk_open_se_sparse(bs, extent_file, bs->open_flags, errp);
             if (ret) {
                 bdrv_unref_child(bs, extent_file);
-                goto out;
+                return ret;
             }
             extent = &s->extents[s->num_extents - 1];
         } else {
             error_setg(errp, "Unsupported extent type '%s'", type);
             bdrv_unref_child(bs, extent_file);
-            ret = -ENOTSUP;
-            goto out;
+            return -ENOTSUP;
         }
         extent->type = g_strdup(type);
     }
-
-    ret = 0;
-    goto out;
+    return 0;
 
 invalid:
     np = next_line(p);
@@ -1212,11 +1201,7 @@ invalid:
         np--;
     }
     error_setg(errp, "Invalid extent line: %.*s", (int)(np - p), p);
-    ret = -EINVAL;
-
-out:
-    g_free(desc_file_dir);
-    return ret;
+    return -EINVAL;
 }
 
 static int vmdk_open_desc_file(BlockDriverState *bs, int flags, char *buf,
@@ -1243,7 +1228,8 @@ static int vmdk_open_desc_file(BlockDriverState *bs, int flags, char *buf,
     }
     s->create_type = g_strdup(ct);
     s->desc_offset = 0;
-    ret = vmdk_parse_extents(buf, bs, options, errp);
+    ret = vmdk_parse_extents(buf, bs, bs->file->bs->exact_filename, options,
+                             errp);
 exit:
     return ret;
 }
@@ -1706,9 +1692,6 @@ static int coroutine_fn vmdk_co_block_status(BlockDriverState *bs,
         if (!extent->compressed) {
             ret |= BDRV_BLOCK_OFFSET_VALID;
             *map = cluster_offset + index_in_cluster;
-            if (extent->flat) {
-                ret |= BDRV_BLOCK_RECURSE;
-            }
         }
         *file = extent->file->bs;
         break;
@@ -1733,16 +1716,6 @@ static int vmdk_write_extent(VmdkExtent *extent, int64_t cluster_offset,
 
     if (extent->compressed) {
         void *compressed_data;
-
-        /* Only whole clusters */
-        if (offset_in_cluster ||
-            n_bytes > (extent->cluster_sectors * SECTOR_SIZE) ||
-            (n_bytes < (extent->cluster_sectors * SECTOR_SIZE) &&
-             offset + n_bytes != extent->end_sector * SECTOR_SIZE))
-        {
-            ret = -EINVAL;
-            goto out;
-        }
 
         if (!extent->has_marker) {
             ret = -EINVAL;
@@ -2076,7 +2049,7 @@ vmdk_co_pwritev_compressed(BlockDriverState *bs, uint64_t offset,
                 return length;
             }
             length = QEMU_ALIGN_UP(length, BDRV_SECTOR_SIZE);
-            ret = bdrv_truncate(s->extents[i].file, length, false,
+            ret = bdrv_truncate(s->extents[i].file, length,
                                 PREALLOC_MODE_OFF, NULL);
             if (ret < 0) {
                 return ret;
@@ -2118,7 +2091,7 @@ static int vmdk_init_extent(BlockBackend *blk,
     int gd_buf_size;
 
     if (flat) {
-        ret = blk_truncate(blk, filesize, false, PREALLOC_MODE_OFF, errp);
+        ret = blk_truncate(blk, filesize, PREALLOC_MODE_OFF, errp);
         goto exit;
     }
     magic = cpu_to_be32(VMDK4_MAGIC);
@@ -2181,7 +2154,7 @@ static int vmdk_init_extent(BlockBackend *blk,
         goto exit;
     }
 
-    ret = blk_truncate(blk, le64_to_cpu(header.grain_offset) << 9, false,
+    ret = blk_truncate(blk, le64_to_cpu(header.grain_offset) << 9,
                        PREALLOC_MODE_OFF, errp);
     if (ret < 0) {
         goto exit;
@@ -2523,7 +2496,7 @@ static int coroutine_fn vmdk_co_do_create(int64_t size,
     /* bdrv_pwrite write padding zeros to align to sector, we don't need that
      * for description file */
     if (desc_offset == 0) {
-        ret = blk_truncate(blk, desc_len, false, PREALLOC_MODE_OFF, errp);
+        ret = blk_truncate(blk, desc_len, PREALLOC_MODE_OFF, errp);
         if (ret < 0) {
             goto exit;
         }

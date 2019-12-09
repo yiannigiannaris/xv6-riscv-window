@@ -28,7 +28,6 @@ config VHOST_USER
 
 config XEN
     bool
-    select FSDEV_9P if VIRTFS
 
 config VIRTFS
     bool

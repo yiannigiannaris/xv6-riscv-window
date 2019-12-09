@@ -15,7 +15,6 @@
 #ifndef HW_PL011_H
 #define HW_PL011_H
 
-#include "hw/qdev-properties.h"
 #include "hw/sysbus.h"
 #include "chardev/char-fe.h"
 

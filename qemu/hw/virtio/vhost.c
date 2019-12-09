@@ -16,6 +16,7 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "hw/virtio/vhost.h"
+#include "hw/hw.h"
 #include "qemu/atomic.h"
 #include "qemu/range.h"
 #include "qemu/error-report.h"
@@ -25,7 +26,6 @@
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-access.h"
 #include "migration/blocker.h"
-#include "migration/qemu-file-types.h"
 #include "sysemu/dma.h"
 #include "trace.h"
 
@@ -677,9 +677,8 @@ static void vhost_iommu_region_add(MemoryListener *listener,
                                          iommu_listener);
     struct vhost_iommu *iommu;
     Int128 end;
-    int iommu_idx, ret;
+    int iommu_idx;
     IOMMUMemoryRegion *iommu_mr;
-    Error *err = NULL;
 
     if (!memory_region_is_iommu(section->mr)) {
         return;
@@ -702,11 +701,7 @@ static void vhost_iommu_region_add(MemoryListener *listener,
     iommu->iommu_offset = section->offset_within_address_space -
                           section->offset_within_region;
     iommu->hdev = dev;
-    ret = memory_region_register_iommu_notifier(section->mr, &iommu->n, &err);
-    if (ret) {
-        error_report_err(err);
-        exit(1);
-    }
+    memory_region_register_iommu_notifier(section->mr, &iommu->n);
     QLIST_INSERT_HEAD(&dev->iommu_list, iommu, iommu_next);
     /* TODO: can replay help performance here? */
 }
@@ -924,7 +919,7 @@ int vhost_device_iotlb_miss(struct vhost_dev *dev, uint64_t iova, int write)
     uint64_t uaddr, len;
     int ret = -EFAULT;
 
-    RCU_READ_LOCK_GUARD();
+    rcu_read_lock();
 
     trace_vhost_iotlb_miss(dev, 1);
 
@@ -956,6 +951,8 @@ int vhost_device_iotlb_miss(struct vhost_dev *dev, uint64_t iova, int write)
     trace_vhost_iotlb_miss(dev, 2);
 
 out:
+    rcu_read_unlock();
+
     return ret;
 }
 

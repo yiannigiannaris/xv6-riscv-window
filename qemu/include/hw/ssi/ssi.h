@@ -11,7 +11,7 @@
 #ifndef QEMU_SSI_H
 #define QEMU_SSI_H
 
-#include "hw/qdev-core.h"
+#include "hw/qdev.h"
 
 typedef struct SSISlave SSISlave;
 typedef struct SSISlaveClass SSISlaveClass;

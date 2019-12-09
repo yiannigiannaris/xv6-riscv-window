@@ -13,13 +13,9 @@ config I82378
     select MC146818RTC
     select PCSPK
 
-config ISA_SUPERIO
-    bool
-    select ISA_BUS
-
 config PC87312
     bool
-    select ISA_SUPERIO
+    select ISA_BUS
     select I8259
     select I8254
     select I8257
@@ -28,10 +24,6 @@ config PC87312
     select PARALLEL
     select FDC
     select IDE_ISA
-
-config PIIX3
-    bool
-    select ISA_BUS
 
 config PIIX4
     bool
@@ -42,14 +34,14 @@ config PIIX4
 
 config VT82C686
     bool
-    select ISA_SUPERIO
+    select ISA_BUS
     select ACPI_SMBUS
     select SERIAL_ISA
     select FDC
 
 config SMC37C669
     bool
-    select ISA_SUPERIO
+    select ISA_BUS
     select SERIAL_ISA
     select PARALLEL
     select FDC

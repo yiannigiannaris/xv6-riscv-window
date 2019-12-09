@@ -378,7 +378,7 @@ qcrypto_tls_creds_load_cert(QCryptoTLSCredsX509 *creds,
 {
     gnutls_datum_t data;
     gnutls_x509_crt_t cert = NULL;
-    g_autofree char *buf = NULL;
+    char *buf = NULL;
     gsize buflen;
     GError *gerr;
     int ret = -1;
@@ -420,6 +420,7 @@ qcrypto_tls_creds_load_cert(QCryptoTLSCredsX509 *creds,
         gnutls_x509_crt_deinit(cert);
         cert = NULL;
     }
+    g_free(buf);
     return cert;
 }
 
@@ -433,8 +434,9 @@ qcrypto_tls_creds_load_ca_cert_list(QCryptoTLSCredsX509 *creds,
                                     Error **errp)
 {
     gnutls_datum_t data;
-    g_autofree char *buf = NULL;
+    char *buf = NULL;
     gsize buflen;
+    int ret = -1;
     GError *gerr = NULL;
 
     *ncerts = 0;
@@ -444,7 +446,7 @@ qcrypto_tls_creds_load_ca_cert_list(QCryptoTLSCredsX509 *creds,
         error_setg(errp, "Cannot load CA cert list %s: %s",
                    certFile, gerr->message);
         g_error_free(gerr);
-        return -1;
+        goto cleanup;
     }
 
     data.data = (unsigned char *)buf;
@@ -455,11 +457,15 @@ qcrypto_tls_creds_load_ca_cert_list(QCryptoTLSCredsX509 *creds,
         error_setg(errp,
                    "Unable to import CA certificate list %s",
                    certFile);
-        return -1;
+        goto cleanup;
     }
     *ncerts = certMax;
 
-    return 0;
+    ret = 0;
+
+ cleanup:
+    g_free(buf);
+    return ret;
 }
 
 

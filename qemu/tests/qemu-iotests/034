@@ -41,8 +41,7 @@ _supported_proto file
 _supported_os Linux
 _unsupported_imgopts "subformat=monolithicFlat" \
                      "subformat=twoGbMaxExtentFlat" \
-                     "subformat=twoGbMaxExtentSparse" \
-                     "subformat=streamOptimized"
+                     "subformat=twoGbMaxExtentSparse"
 
 CLUSTER_SIZE=4k
 size=128M

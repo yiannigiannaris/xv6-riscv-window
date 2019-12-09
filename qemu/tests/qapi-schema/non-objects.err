@@ -1,1 +1,1 @@
-non-objects.json:1:1: expected '{'
+tests/qapi-schema/non-objects.json:1:1: Expected "{"

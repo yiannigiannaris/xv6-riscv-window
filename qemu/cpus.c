@@ -25,7 +25,6 @@
 #include "qemu/osdep.h"
 #include "qemu-common.h"
 #include "qemu/config-file.h"
-#include "migration/vmstate.h"
 #include "monitor/monitor.h"
 #include "qapi/error.h"
 #include "qapi/qapi-commands-misc.h"
@@ -45,7 +44,6 @@
 #include "exec/exec-all.h"
 
 #include "qemu/thread.h"
-#include "qemu/plugin.h"
 #include "sysemu/cpus.h"
 #include "sysemu/qtest.h"
 #include "qemu/main-loop.h"
@@ -56,9 +54,7 @@
 #include "tcg.h"
 #include "hw/nmi.h"
 #include "sysemu/replay.h"
-#include "sysemu/runstate.h"
 #include "hw/boards.h"
-#include "hw/hw.h"
 
 #ifdef CONFIG_LINUX
 
@@ -77,8 +73,6 @@
 #endif
 
 #endif /* CONFIG_LINUX */
-
-static QemuMutex qemu_global_mutex;
 
 int64_t max_delay;
 int64_t max_advance;
@@ -559,8 +553,7 @@ void qtest_clock_warp(int64_t dest)
     assert(qtest_enabled());
     aio_context = qemu_get_aio_context();
     while (clock < dest) {
-        int64_t deadline = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL,
-                                                      QEMU_TIMER_ATTR_ALL);
+        int64_t deadline = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL);
         int64_t warp = qemu_soonest_timeout(dest - clock, deadline);
 
         seqlock_write_lock(&timers_state.vm_clock_seqlock,
@@ -620,8 +613,7 @@ void qemu_start_warp_timer(void)
 
     /* We want to use the earliest deadline from ALL vm_clocks */
     clock = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL_RT);
-    deadline = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL,
-                                          ~QEMU_TIMER_ATTR_EXTERNAL);
+    deadline = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL);
     if (deadline < 0) {
         static bool notified;
         if (!icount_sleep && !notified) {
@@ -785,7 +777,7 @@ static void cpu_throttle_thread(CPUState *cpu, run_on_cpu_data opaque)
 {
     double pct;
     double throttle_ratio;
-    int64_t sleeptime_ns, endtime_ns;
+    long sleeptime_ns;
 
     if (!cpu_throttle_get_percentage()) {
         return;
@@ -793,20 +785,11 @@ static void cpu_throttle_thread(CPUState *cpu, run_on_cpu_data opaque)
 
     pct = (double)cpu_throttle_get_percentage()/100;
     throttle_ratio = pct / (1 - pct);
-    /* Add 1ns to fix double's rounding error (like 0.9999999...) */
-    sleeptime_ns = (int64_t)(throttle_ratio * CPU_THROTTLE_TIMESLICE_NS + 1);
-    endtime_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME) + sleeptime_ns;
-    while (sleeptime_ns > 0 && !cpu->stop) {
-        if (sleeptime_ns > SCALE_MS) {
-            qemu_cond_timedwait(cpu->halt_cond, &qemu_global_mutex,
-                                sleeptime_ns / SCALE_MS);
-        } else {
-            qemu_mutex_unlock_iothread();
-            g_usleep(sleeptime_ns / SCALE_US);
-            qemu_mutex_lock_iothread();
-        }
-        sleeptime_ns = endtime_ns - qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
-    }
+    sleeptime_ns = (long)(throttle_ratio * CPU_THROTTLE_TIMESLICE_NS);
+
+    qemu_mutex_unlock_iothread();
+    g_usleep(sleeptime_ns / 1000); /* Convert ns to us for usleep call */
+    qemu_mutex_lock_iothread();
     atomic_set(&cpu->throttle_thread_scheduled, 0);
 }
 
@@ -950,8 +933,8 @@ static inline int64_t qemu_tcg_next_kick(void)
     return qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + TCG_KICK_PERIOD;
 }
 
-/* Kick the currently round-robin scheduled vCPU to next */
-static void qemu_cpu_kick_rr_next_cpu(void)
+/* Kick the currently round-robin scheduled vCPU */
+static void qemu_cpu_kick_rr_cpu(void)
 {
     CPUState *cpu;
     do {
@@ -960,16 +943,6 @@ static void qemu_cpu_kick_rr_next_cpu(void)
             cpu_exit(cpu);
         }
     } while (cpu != atomic_mb_read(&tcg_current_rr_cpu));
-}
-
-/* Kick all RR vCPUs */
-static void qemu_cpu_kick_rr_cpus(void)
-{
-    CPUState *cpu;
-
-    CPU_FOREACH(cpu) {
-        cpu_exit(cpu);
-    };
 }
 
 static void do_nothing(CPUState *cpu, run_on_cpu_data unused)
@@ -1004,7 +977,7 @@ void qemu_timer_notify_cb(void *opaque, QEMUClockType type)
 static void kick_tcg_thread(void *opaque)
 {
     timer_mod(tcg_kick_vcpu_timer, qemu_tcg_next_kick());
-    qemu_cpu_kick_rr_next_cpu();
+    qemu_cpu_kick_rr_cpu();
 }
 
 static void start_tcg_kick_timer(void)
@@ -1108,6 +1081,7 @@ static int do_vm_stop(RunState state, bool send_stop)
     }
 
     bdrv_drain_all();
+    replay_disable_events();
     ret = bdrv_flush_all();
 
     return ret;
@@ -1193,6 +1167,8 @@ static void qemu_init_sigbus(void)
 }
 #endif /* !CONFIG_LINUX */
 
+static QemuMutex qemu_global_mutex;
+
 static QemuThread io_thread;
 
 /* cpu creation */
@@ -1265,17 +1241,8 @@ static void qemu_tcg_rr_wait_io_event(void)
 
 static void qemu_wait_io_event(CPUState *cpu)
 {
-    bool slept = false;
-
     while (cpu_thread_is_idle(cpu)) {
-        if (!slept) {
-            slept = true;
-            qemu_plugin_vcpu_idle_cb(cpu);
-        }
         qemu_cond_wait(cpu->halt_cond, &qemu_global_mutex);
-    }
-    if (slept) {
-        qemu_plugin_vcpu_resume_cb(cpu);
     }
 
 #ifdef _WIN32
@@ -1382,12 +1349,7 @@ static int64_t tcg_get_icount_limit(void)
     int64_t deadline;
 
     if (replay_mode != REPLAY_MODE_PLAY) {
-        /*
-         * Include all the timers, because they may need an attention.
-         * Too long CPU execution may create unnecessary delay in UI.
-         */
-        deadline = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL,
-                                              QEMU_TIMER_ATTR_ALL);
+        deadline = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL);
 
         /* Maintain prior (possibly buggy) behaviour where if no deadline
          * was set (as there is no QEMU_CLOCK_VIRTUAL timer) or it is more than
@@ -1408,8 +1370,8 @@ static void handle_icount_deadline(void)
 {
     assert(qemu_in_vcpu_thread());
     if (use_icount) {
-        int64_t deadline = qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL,
-                                                      QEMU_TIMER_ATTR_ALL);
+        int64_t deadline =
+            qemu_clock_deadline_ns_all(QEMU_CLOCK_VIRTUAL);
 
         if (deadline == 0) {
             /* Wake up other AioContexts.  */
@@ -1847,11 +1809,9 @@ void qemu_cpu_kick(CPUState *cpu)
 {
     qemu_cond_broadcast(cpu->halt_cond);
     if (tcg_enabled()) {
-        if (qemu_tcg_mttcg_enabled()) {
-            cpu_exit(cpu);
-        } else {
-            qemu_cpu_kick_rr_cpus();
-        }
+        cpu_exit(cpu);
+        /* NOP unless doing single-thread RR */
+        qemu_cpu_kick_rr_cpu();
     } else {
         if (hax_enabled()) {
             /*
@@ -2202,6 +2162,7 @@ int vm_prepare_start(void)
     /* We are sending this now, but the CPUs will be resumed shortly later */
     qapi_event_send_resume();
 
+    replay_enable_events();
     cpu_enable_ticks();
     runstate_set(RUN_STATE_RUNNING);
     vm_state_notify(1, RUN_STATE_RUNNING);

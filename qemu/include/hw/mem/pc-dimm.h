@@ -17,7 +17,9 @@
 #define QEMU_PC_DIMM_H
 
 #include "exec/memory.h"
-#include "hw/qdev-core.h"
+#include "sysemu/hostmem.h"
+#include "hw/qdev.h"
+#include "hw/boards.h"
 
 #define TYPE_PC_DIMM "pc-dimm"
 #define PC_DIMM(obj) \

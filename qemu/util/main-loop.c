@@ -61,8 +61,7 @@ static void sigfd_handler(void *opaque)
         }
 
         if (len != sizeof(info)) {
-            error_report("read from sigfd returned %zd: %s", len,
-                         g_strerror(errno));
+            printf("read from sigfd returned %zd: %m\n", len);
             return;
         }
 

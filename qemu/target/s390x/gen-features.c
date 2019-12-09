@@ -698,23 +698,15 @@ static uint16_t qemu_V4_0[] = {
     S390_FEAT_ZPCI,
 };
 
-static uint16_t qemu_V4_1[] = {
+static uint16_t qemu_LATEST[] = {
     S390_FEAT_STFLE_53,
     S390_FEAT_VECTOR,
-};
-
-static uint16_t qemu_LATEST[] = {
-    S390_FEAT_ACCESS_EXCEPTION_FS_INDICATION,
-    S390_FEAT_SIDE_EFFECT_ACCESS_ESOP2,
-    S390_FEAT_ESOP,
 };
 
 /* add all new definitions before this point */
 static uint16_t qemu_MAX[] = {
     /* generates a dependency warning, leave it out for now */
     S390_FEAT_MSA_EXT_5,
-    /* features introduced after the z13 */
-    S390_FEAT_INSTRUCTION_EXEC_PROT,
 };
 
 /****** END FEATURE DEFS ******/
@@ -832,7 +824,6 @@ static FeatGroupDefSpec QemuFeatDef[] = {
     QEMU_FEAT_INITIALIZER(V2_11),
     QEMU_FEAT_INITIALIZER(V3_1),
     QEMU_FEAT_INITIALIZER(V4_0),
-    QEMU_FEAT_INITIALIZER(V4_1),
     QEMU_FEAT_INITIALIZER(LATEST),
     QEMU_FEAT_INITIALIZER(MAX),
 };

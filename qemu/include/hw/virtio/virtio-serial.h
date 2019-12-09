@@ -17,6 +17,7 @@
 #define QEMU_VIRTIO_SERIAL_H
 
 #include "standard-headers/linux/virtio_console.h"
+#include "hw/qdev.h"
 #include "hw/virtio/virtio.h"
 
 struct virtio_serial_conf {

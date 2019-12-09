@@ -63,7 +63,12 @@ static int guess_disk_lchs(BlockBackend *blk,
 
     blk_get_geometry(blk, &nb_sectors);
 
-    if (blk_pread(blk, 0, buf, BDRV_SECTOR_SIZE) < 0) {
+    /**
+     * The function will be invoked during startup not only in sync I/O mode,
+     * but also in async I/O mode. So the I/O throttling function has to
+     * be disabled temporarily here, not permanently.
+     */
+    if (blk_pread_unthrottled(blk, 0, buf, BDRV_SECTOR_SIZE) < 0) {
         return -1;
     }
     /* test msdos magic */

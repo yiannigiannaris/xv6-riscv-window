@@ -1,7 +1,7 @@
 #ifndef WDT_DIAG288_H
 #define WDT_DIAG288_H
 
-#include "hw/qdev-core.h"
+#include "hw/qdev.h"
 
 #define TYPE_WDT_DIAG288 "diag288"
 #define DIAG288(obj) \

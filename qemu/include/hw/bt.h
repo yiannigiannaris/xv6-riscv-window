@@ -26,6 +26,7 @@
 #ifndef HW_BT_H
 #define HW_BT_H
 
+#include "hw/irq.h"
 
 /* BD Address */
 typedef struct {

@@ -14,7 +14,6 @@
 #include "target/ppc/cpu.h"
 #include "sysemu/cpus.h"
 #include "sysemu/kvm.h"
-#include "sysemu/runstate.h"
 #include "hw/ppc/spapr.h"
 #include "hw/ppc/spapr_cpu_core.h"
 #include "hw/ppc/spapr_xive.h"
@@ -232,14 +231,14 @@ void kvmppc_xive_sync_source(SpaprXive *xive, uint32_t lisn, Error **errp)
  * only need to inform the KVM XIVE device about their type: LSI or
  * MSI.
  */
-int kvmppc_xive_source_reset_one(XiveSource *xsrc, int srcno, Error **errp)
+void kvmppc_xive_source_reset_one(XiveSource *xsrc, int srcno, Error **errp)
 {
     SpaprXive *xive = SPAPR_XIVE(xsrc->xive);
     uint64_t state = 0;
 
     /* The KVM XIVE device is not in use */
     if (xive->fd == -1) {
-        return -ENODEV;
+        return;
     }
 
     if (xive_source_irq_is_lsi(xsrc, srcno)) {
@@ -249,21 +248,16 @@ int kvmppc_xive_source_reset_one(XiveSource *xsrc, int srcno, Error **errp)
         }
     }
 
-    return kvm_device_access(xive->fd, KVM_DEV_XIVE_GRP_SOURCE, srcno, &state,
-                             true, errp);
+    kvm_device_access(xive->fd, KVM_DEV_XIVE_GRP_SOURCE, srcno, &state,
+                      true, errp);
 }
 
 static void kvmppc_xive_source_reset(XiveSource *xsrc, Error **errp)
 {
-    SpaprXive *xive = SPAPR_XIVE(xsrc->xive);
     int i;
 
     for (i = 0; i < xsrc->nr_irqs; i++) {
         Error *local_err = NULL;
-
-        if (!xive_eas_is_valid(&xive->eat[i])) {
-            continue;
-        }
 
         kvmppc_xive_source_reset_one(xsrc, i, &local_err);
         if (local_err) {
@@ -333,18 +327,11 @@ uint64_t kvmppc_xive_esb_rw(XiveSource *xsrc, int srcno, uint32_t offset,
 
 static void kvmppc_xive_source_get_state(XiveSource *xsrc)
 {
-    SpaprXive *xive = SPAPR_XIVE(xsrc->xive);
     int i;
 
     for (i = 0; i < xsrc->nr_irqs; i++) {
-        uint8_t pq;
-
-        if (!xive_eas_is_valid(&xive->eat[i])) {
-            continue;
-        }
-
         /* Perform a load without side effect to retrieve the PQ bits */
-        pq = xive_esb_read(xsrc, i, XIVE_ESB_GET);
+        uint8_t pq = xive_esb_read(xsrc, i, XIVE_ESB_GET);
 
         /* and save PQ locally */
         xive_source_esb_set(xsrc, i, pq);
@@ -533,14 +520,9 @@ static void kvmppc_xive_change_state_handler(void *opaque, int running,
      */
     if (running) {
         for (i = 0; i < xsrc->nr_irqs; i++) {
-            uint8_t pq;
+            uint8_t pq = xive_source_esb_get(xsrc, i);
             uint8_t old_pq;
 
-            if (!xive_eas_is_valid(&xive->eat[i])) {
-                continue;
-            }
-
-            pq = xive_source_esb_get(xsrc, i);
             old_pq = xive_esb_read(xsrc, i, XIVE_ESB_SET_PQ_00 + (pq << 8));
 
             /*
@@ -562,13 +544,7 @@ static void kvmppc_xive_change_state_handler(void *opaque, int running,
      * migration is in progress.
      */
     for (i = 0; i < xsrc->nr_irqs; i++) {
-        uint8_t pq;
-
-        if (!xive_eas_is_valid(&xive->eat[i])) {
-            continue;
-        }
-
-        pq = xive_esb_read(xsrc, i, XIVE_ESB_GET);
+        uint8_t pq = xive_esb_read(xsrc, i, XIVE_ESB_GET);
 
         /*
          * PQ is set to PENDING to possibly catch a triggered
@@ -678,17 +654,6 @@ int kvmppc_xive_post_load(SpaprXive *xive, int version_id)
             continue;
         }
 
-        /*
-         * We can only restore the source config if the source has been
-         * previously set in KVM. Since we don't do that for all interrupts
-         * at reset time anymore, let's do it now.
-         */
-        kvmppc_xive_source_reset_one(&xive->source, i, &local_err);
-        if (local_err) {
-            error_report_err(local_err);
-            return -1;
-        }
-
         kvmppc_xive_set_source_config(xive, i, &xive->eat[i], &local_err);
         if (local_err) {
             error_report_err(local_err);
@@ -740,9 +705,8 @@ static void *kvmppc_xive_mmap(SpaprXive *xive, int pgoff, size_t len,
  * All the XIVE memory regions are now backed by mappings from the KVM
  * XIVE device.
  */
-int kvmppc_xive_connect(SpaprInterruptController *intc, Error **errp)
+void kvmppc_xive_connect(SpaprXive *xive, Error **errp)
 {
-    SpaprXive *xive = SPAPR_XIVE(intc);
     XiveSource *xsrc = &xive->source;
     Error *local_err = NULL;
     size_t esb_len = (1ull << xsrc->esb_shift) * xsrc->nr_irqs;
@@ -754,19 +718,19 @@ int kvmppc_xive_connect(SpaprInterruptController *intc, Error **errp)
      * rebooting under the XIVE-only interrupt mode.
      */
     if (xive->fd != -1) {
-        return 0;
+        return;
     }
 
     if (!kvmppc_has_cap_xive()) {
         error_setg(errp, "IRQ_XIVE capability must be present for KVM");
-        return -1;
+        return;
     }
 
     /* First, create the KVM XIVE device */
     xive->fd = kvm_create_device(kvm_state, KVM_DEV_TYPE_XIVE, false);
     if (xive->fd < 0) {
         error_setg_errno(errp, -xive->fd, "XIVE: error creating KVM device");
-        return -1;
+        return;
     }
 
     /*
@@ -822,22 +786,25 @@ int kvmppc_xive_connect(SpaprInterruptController *intc, Error **errp)
     kvm_kernel_irqchip = true;
     kvm_msi_via_irqfd_allowed = true;
     kvm_gsi_direct_mapping = true;
-    return 0;
+    return;
 
 fail:
     error_propagate(errp, local_err);
-    kvmppc_xive_disconnect(intc);
-    return -1;
+    kvmppc_xive_disconnect(xive, NULL);
 }
 
-void kvmppc_xive_disconnect(SpaprInterruptController *intc)
+void kvmppc_xive_disconnect(SpaprXive *xive, Error **errp)
 {
-    SpaprXive *xive = SPAPR_XIVE(intc);
     XiveSource *xsrc;
     size_t esb_len;
 
     /* The KVM XIVE device is not in use */
     if (!xive || xive->fd == -1) {
+        return;
+    }
+
+    if (!kvmppc_has_cap_xive()) {
+        error_setg(errp, "IRQ_XIVE capability must be present for KVM");
         return;
     }
 

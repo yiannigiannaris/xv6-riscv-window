@@ -160,8 +160,6 @@ QCryptoTLSSession *qcrypto_tls_session_new(QCryptoTLSCreds *creds,
  */
 void qcrypto_tls_session_free(QCryptoTLSSession *sess);
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(QCryptoTLSSession, qcrypto_tls_session_free)
-
 /**
  * qcrypto_tls_session_check_credentials:
  * @sess: the TLS session object

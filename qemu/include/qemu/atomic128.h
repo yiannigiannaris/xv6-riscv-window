@@ -13,8 +13,6 @@
 #ifndef QEMU_ATOMIC128_H
 #define QEMU_ATOMIC128_H
 
-#include "qemu/int128.h"
-
 /*
  * GCC is a house divided about supporting large atomic operations.
  *

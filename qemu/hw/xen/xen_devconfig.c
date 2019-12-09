@@ -2,7 +2,6 @@
 #include "hw/xen/xen-legacy-backend.h"
 #include "qemu/option.h"
 #include "sysemu/blockdev.h"
-#include "sysemu/sysemu.h"
 
 /* ------------------------------------------------------------- */
 

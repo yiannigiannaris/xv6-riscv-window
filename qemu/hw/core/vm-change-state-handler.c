@@ -16,8 +16,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/qdev-core.h"
-#include "sysemu/runstate.h"
+#include "hw/qdev.h"
 
 static int qdev_get_dev_tree_depth(DeviceState *dev)
 {

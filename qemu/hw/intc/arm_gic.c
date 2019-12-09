@@ -19,11 +19,10 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/irq.h"
 #include "hw/sysbus.h"
 #include "gic_internal.h"
 #include "qapi/error.h"
-#include "hw/core/cpu.h"
+#include "qom/cpu.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
 #include "trace.h"

@@ -95,8 +95,7 @@ static void virtio_scsi_register_nodes(void)
     };
 
     QOSGraphEdgeOptions opts = {
-        .before_cmd_line = "-drive id=drv0,if=none,file=null-co://,"
-                           "file.read-zeroes=on,format=raw",
+        .before_cmd_line = "-drive id=drv0,if=none,file=null-co://,format=raw",
         .after_cmd_line = "-device scsi-hd,bus=vs0.0,drive=drv0",
     };
 

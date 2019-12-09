@@ -1,3 +1,2 @@
-enum-dict-member-unknown.json: In enum 'MyEnum':
-enum-dict-member-unknown.json:2: 'data' member has unknown key 'bad-key'
+tests/qapi-schema/enum-dict-member-unknown.json:2: Unknown key 'bad-key' in dictionary member of enum 'MyEnum'
 Valid keys are 'if', 'name'.

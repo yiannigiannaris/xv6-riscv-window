@@ -13,7 +13,6 @@
 #include "qapi/error.h"
 #include "qapi/qmp/qdict.h"
 #include "qemu/option.h"
-#include "qemu/main-loop.h"
 #include "replication.h"
 #include "block/block_int.h"
 #include "block/qdict.h"

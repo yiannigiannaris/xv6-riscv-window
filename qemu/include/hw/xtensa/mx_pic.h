@@ -29,6 +29,7 @@
 #define XTENSA_MX_PIC_H
 
 #include "exec/memory.h"
+#include "hw/irq.h"
 
 struct XtensaMxPic;
 typedef struct XtensaMxPic XtensaMxPic;

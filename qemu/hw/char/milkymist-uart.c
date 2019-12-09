@@ -22,10 +22,8 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/irq.h"
-#include "hw/qdev-properties.h"
+#include "hw/hw.h"
 #include "hw/sysbus.h"
-#include "migration/vmstate.h"
 #include "trace.h"
 #include "chardev/char-fe.h"
 #include "qemu/error-report.h"

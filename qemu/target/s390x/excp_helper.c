@@ -34,15 +34,15 @@
 #include "hw/boards.h"
 #endif
 
-void QEMU_NORETURN tcg_s390_program_interrupt(CPUS390XState *env,
-                                              uint32_t code, uintptr_t ra)
+void QEMU_NORETURN tcg_s390_program_interrupt(CPUS390XState *env, uint32_t code,
+                                              int ilen, uintptr_t ra)
 {
     CPUState *cs = env_cpu(env);
 
     cpu_restore_state(cs, ra, true);
     qemu_log_mask(CPU_LOG_INT, "program interrupt at %#" PRIx64 "\n",
                   env->psw.addr);
-    trigger_pgm_exception(env, code);
+    trigger_pgm_exception(env, code, ilen);
     cpu_loop_exit(cs);
 }
 
@@ -60,7 +60,7 @@ void QEMU_NORETURN tcg_s390_data_exception(CPUS390XState *env, uint32_t dxc,
     if (env->cregs[0] & CR0_AFP) {
         env->fpc = deposit32(env->fpc, 8, 8, dxc);
     }
-    tcg_s390_program_interrupt(env, PGM_DATA, ra);
+    tcg_s390_program_interrupt(env, PGM_DATA, ILEN_AUTO, ra);
 }
 
 void QEMU_NORETURN tcg_s390_vector_exception(CPUS390XState *env, uint32_t vxc,
@@ -75,7 +75,7 @@ void QEMU_NORETURN tcg_s390_vector_exception(CPUS390XState *env, uint32_t vxc,
 
     /* Always store the VXC into the FPC, without AFP it is undefined */
     env->fpc = deposit32(env->fpc, 8, 8, vxc);
-    tcg_s390_program_interrupt(env, PGM_VECTOR_PROCESSING, ra);
+    tcg_s390_program_interrupt(env, PGM_VECTOR_PROCESSING, ILEN_AUTO, ra);
 }
 
 void HELPER(data_exception)(CPUS390XState *env, uint32_t dxc)
@@ -96,7 +96,7 @@ bool s390_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
 {
     S390CPU *cpu = S390_CPU(cs);
 
-    trigger_pgm_exception(&cpu->env, PGM_ADDRESSING);
+    trigger_pgm_exception(&cpu->env, PGM_ADDRESSING, ILEN_AUTO);
     /* On real machines this value is dropped into LowMem.  Since this
        is userland, simply put this someplace that cpu_loop can find it.  */
     cpu->env.__excp_addr = address;
@@ -126,8 +126,8 @@ bool s390_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
     S390CPU *cpu = S390_CPU(cs);
     CPUS390XState *env = &cpu->env;
     target_ulong vaddr, raddr;
-    uint64_t asc, tec;
-    int prot, excp;
+    uint64_t asc;
+    int prot, fail;
 
     qemu_log_mask(CPU_LOG_MMU, "%s: addr 0x%" VADDR_PRIx " rw %d mmu_idx %d\n",
                   __func__, address, access_type, mmu_idx);
@@ -140,30 +140,30 @@ bool s390_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
         if (!(env->psw.mask & PSW_MASK_64)) {
             vaddr &= 0x7fffffff;
         }
-        excp = mmu_translate(env, vaddr, access_type, asc, &raddr, &prot, &tec);
+        fail = mmu_translate(env, vaddr, access_type, asc, &raddr, &prot, true);
     } else if (mmu_idx == MMU_REAL_IDX) {
         /* 31-Bit mode */
         if (!(env->psw.mask & PSW_MASK_64)) {
             vaddr &= 0x7fffffff;
         }
-        excp = mmu_translate_real(env, vaddr, access_type, &raddr, &prot, &tec);
+        fail = mmu_translate_real(env, vaddr, access_type, &raddr, &prot);
     } else {
         g_assert_not_reached();
     }
 
     /* check out of RAM access */
-    if (!excp &&
+    if (!fail &&
         !address_space_access_valid(&address_space_memory, raddr,
                                     TARGET_PAGE_SIZE, access_type,
                                     MEMTXATTRS_UNSPECIFIED)) {
         qemu_log_mask(CPU_LOG_MMU,
                       "%s: raddr %" PRIx64 " > ram_size %" PRIx64 "\n",
                       __func__, (uint64_t)raddr, (uint64_t)ram_size);
-        excp = PGM_ADDRESSING;
-        tec = 0; /* unused */
+        trigger_pgm_exception(env, PGM_ADDRESSING, ILEN_AUTO);
+        fail = 1;
     }
 
-    if (!excp) {
+    if (!fail) {
         qemu_log_mask(CPU_LOG_MMU,
                       "%s: set tlb %" PRIx64 " -> %" PRIx64 " (%x)\n",
                       __func__, (uint64_t)vaddr, (uint64_t)raddr, prot);
@@ -175,20 +175,23 @@ bool s390_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
         return false;
     }
 
-    if (excp != PGM_ADDRESSING) {
-        stq_phys(env_cpu(env)->as,
-                 env->psa + offsetof(LowCore, trans_exc_code), tec);
-    }
+    cpu_restore_state(cs, retaddr, true);
 
     /*
-     * For data accesses, ILEN will be filled in from the unwind info,
-     * within cpu_loop_exit_restore.  For code accesses, retaddr == 0,
-     * and so unwinding will not occur.  However, ILEN is also undefined
-     * for that case -- we choose to set ILEN = 2.
+     * The ILC value for code accesses is undefined.  The important
+     * thing here is to *not* leave env->int_pgm_ilen set to ILEN_AUTO,
+     * which would cause do_program_interrupt to attempt to read from
+     * env->psw.addr again.  C.f. the condition in trigger_page_fault,
+     * but is not universally applied.
+     *
+     * ??? If we remove ILEN_AUTO, by moving the computation of ILEN
+     * into cpu_restore_state, then we may remove this entirely.
      */
-    env->int_pgm_ilen = 2;
-    trigger_pgm_exception(env, excp);
-    cpu_loop_exit_restore(cs, retaddr);
+    if (access_type == MMU_INST_FETCH) {
+        env->int_pgm_ilen = 2;
+    }
+
+    cpu_loop_exit(cs);
 }
 
 static void do_program_interrupt(CPUS390XState *env)
@@ -197,6 +200,9 @@ static void do_program_interrupt(CPUS390XState *env)
     LowCore *lowcore;
     int ilen = env->int_pgm_ilen;
 
+    if (ilen == ILEN_AUTO) {
+        ilen = get_ilen(cpu_ldub_code(env, env->psw.addr));
+    }
     assert(ilen == 2 || ilen == 4 || ilen == 6);
 
     switch (env->int_pgm_code) {
@@ -608,7 +614,7 @@ void s390x_cpu_do_unaligned_access(CPUState *cs, vaddr addr,
     S390CPU *cpu = S390_CPU(cs);
     CPUS390XState *env = &cpu->env;
 
-    tcg_s390_program_interrupt(env, PGM_SPECIFICATION, retaddr);
+    s390_program_interrupt(env, PGM_SPECIFICATION, ILEN_AUTO, retaddr);
 }
 
 #endif /* CONFIG_USER_ONLY */

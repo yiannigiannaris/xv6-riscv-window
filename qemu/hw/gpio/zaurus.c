@@ -17,10 +17,9 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/irq.h"
+#include "hw/hw.h"
 #include "hw/arm/sharpsl.h"
 #include "hw/sysbus.h"
-#include "migration/vmstate.h"
 #include "qemu/module.h"
 
 #undef REG_FMT

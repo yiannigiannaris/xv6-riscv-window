@@ -64,18 +64,18 @@
 static inline RES_TYPE
 glue(glue(cpu_ld, USUFFIX), MEMSUFFIX)(CPUArchState *env, abi_ptr ptr)
 {
-    RES_TYPE ret;
 #ifdef CODE_ACCESS
+    RES_TYPE ret;
     set_helper_retaddr(1);
     ret = glue(glue(ld, USUFFIX), _p)(g2h(ptr));
     clear_helper_retaddr();
-#else
-    uint16_t meminfo = trace_mem_build_info(SHIFT, false, MO_TE, false,
-                                            MMU_USER_IDX);
-    trace_guest_mem_before_exec(env_cpu(env), ptr, meminfo);
-    ret = glue(glue(ld, USUFFIX), _p)(g2h(ptr));
-#endif
     return ret;
+#else
+    trace_guest_mem_before_exec(
+        env_cpu(env), ptr,
+        trace_mem_build_info(SHIFT, false, MO_TE, false));
+    return glue(glue(ld, USUFFIX), _p)(g2h(ptr));
+#endif
 }
 
 #ifndef CODE_ACCESS
@@ -96,19 +96,18 @@ glue(glue(glue(cpu_ld, USUFFIX), MEMSUFFIX), _ra)(CPUArchState *env,
 static inline int
 glue(glue(cpu_lds, SUFFIX), MEMSUFFIX)(CPUArchState *env, abi_ptr ptr)
 {
-    int ret;
 #ifdef CODE_ACCESS
+    int ret;
     set_helper_retaddr(1);
     ret = glue(glue(lds, SUFFIX), _p)(g2h(ptr));
     clear_helper_retaddr();
-#else
-    uint16_t meminfo = trace_mem_build_info(SHIFT, true, MO_TE, false,
-                                            MMU_USER_IDX);
-    trace_guest_mem_before_exec(env_cpu(env), ptr, meminfo);
-    ret = glue(glue(lds, SUFFIX), _p)(g2h(ptr));
-    qemu_plugin_vcpu_mem_cb(env_cpu(env), ptr, meminfo);
-#endif
     return ret;
+#else
+    trace_guest_mem_before_exec(
+        env_cpu(env), ptr,
+        trace_mem_build_info(SHIFT, true, MO_TE, false));
+    return glue(glue(lds, SUFFIX), _p)(g2h(ptr));
+#endif
 }
 
 #ifndef CODE_ACCESS
@@ -131,11 +130,10 @@ static inline void
 glue(glue(cpu_st, SUFFIX), MEMSUFFIX)(CPUArchState *env, abi_ptr ptr,
                                       RES_TYPE v)
 {
-    uint16_t meminfo = trace_mem_build_info(SHIFT, false, MO_TE, true,
-                                            MMU_USER_IDX);
-    trace_guest_mem_before_exec(env_cpu(env), ptr, meminfo);
+    trace_guest_mem_before_exec(
+        env_cpu(env), ptr,
+        trace_mem_build_info(SHIFT, false, MO_TE, true));
     glue(glue(st, SUFFIX), _p)(g2h(ptr), v);
-    qemu_plugin_vcpu_mem_cb(env_cpu(env), ptr, meminfo);
 }
 
 static inline void

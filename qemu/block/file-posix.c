@@ -161,11 +161,6 @@ typedef struct BDRVRawState {
     bool needs_alignment;
     bool drop_cache;
     bool check_cache_dropped;
-    struct {
-        uint64_t discard_nb_ok;
-        uint64_t discard_nb_failed;
-        uint64_t discard_bytes_ok;
-    } stats;
 
     PRManager *pr_mgr;
 } BDRVRawState;
@@ -222,7 +217,7 @@ static int raw_normalize_devicepath(const char **filename, Error **errp)
     fname = *filename;
     dp = strrchr(fname, '/');
     if (lstat(fname, &sb) < 0) {
-        error_setg_file_open(errp, errno, fname);
+        error_setg_errno(errp, errno, "%s: stat failed", fname);
         return -errno;
     }
 
@@ -327,7 +322,7 @@ static void raw_probe_alignment(BlockDriverState *bs, int fd, Error **errp)
 {
     BDRVRawState *s = bs->opaque;
     char *buf;
-    size_t max_align = MAX(MAX_BLOCKSIZE, qemu_real_host_page_size);
+    size_t max_align = MAX(MAX_BLOCKSIZE, getpagesize());
     size_t alignments[] = {1, 512, 1024, 2048, 4096};
 
     /* For SCSI generic devices the alignment is not really used.
@@ -385,7 +380,7 @@ static void raw_probe_alignment(BlockDriverState *bs, int fd, Error **errp)
         for (i = 0; i < ARRAY_SIZE(alignments); i++) {
             align = alignments[i];
             if (raw_is_io_aligned(fd, buf + align, max_align)) {
-                /* Fallback to request_alignment. */
+                /* Fallback to request_aligment. */
                 s->buf_align = (align != 1) ? align : bs->bl.request_alignment;
                 break;
             }
@@ -566,7 +561,7 @@ static int raw_open_common(BlockDriverState *bs, QDict *options,
     ret = fd < 0 ? -errno : 0;
 
     if (ret < 0) {
-        error_setg_file_open(errp, -ret, filename);
+        error_setg_errno(errp, -ret, "Could not open '%s'", filename);
         if (ret == -EROFS) {
             ret = -EACCES;
         }
@@ -1136,14 +1131,13 @@ static void raw_refresh_limits(BlockDriverState *bs, Error **errp)
 
         ret = sg_get_max_segments(s->fd);
         if (ret > 0) {
-            bs->bl.max_transfer = MIN(bs->bl.max_transfer,
-                                      ret * qemu_real_host_page_size);
+            bs->bl.max_transfer = MIN(bs->bl.max_transfer, ret * getpagesize());
         }
     }
 
     raw_probe_alignment(bs, s->fd, errp);
     bs->bl.min_mem_alignment = s->buf_align;
-    bs->bl.opt_mem_alignment = MAX(s->buf_align, qemu_real_host_page_size);
+    bs->bl.opt_mem_alignment = MAX(s->buf_align, getpagesize());
 }
 
 static int check_for_dasd(int fd)
@@ -1508,12 +1502,12 @@ static ssize_t handle_aiocb_write_zeroes_block(RawPosixAIOData *aiocb)
         } while (errno == EINTR);
 
         ret = translate_err(-errno);
-        if (ret == -ENOTSUP) {
-            s->has_write_zeroes = false;
-        }
     }
 #endif
 
+    if (ret == -ENOTSUP) {
+        s->has_write_zeroes = false;
+    }
     return ret;
 }
 
@@ -1533,13 +1527,6 @@ static int handle_aiocb_write_zeroes(void *opaque)
     if (s->has_write_zeroes) {
         int ret = do_fallocate(s->fd, FALLOC_FL_ZERO_RANGE,
                                aiocb->aio_offset, aiocb->aio_nbytes);
-        if (ret == -EINVAL) {
-            /*
-             * Allow falling back to pwrite for file systems that
-             * do not support fallocate() for an unaligned byte range.
-             */
-            return -ENOTSUP;
-        }
         if (ret == 0 || ret != -ENOTSUP) {
             return ret;
         }
@@ -1706,7 +1693,7 @@ static int allocate_first_block(int fd, size_t max_size)
     size_t write_size = (max_size < MAX_BLOCKSIZE)
         ? BDRV_SECTOR_SIZE
         : MAX_BLOCKSIZE;
-    size_t max_align = MAX(MAX_BLOCKSIZE, qemu_real_host_page_size);
+    size_t max_align = MAX(MAX_BLOCKSIZE, getpagesize());
     void *buf;
     ssize_t n;
     int ret;
@@ -1973,7 +1960,7 @@ static void raw_aio_attach_aio_context(BlockDriverState *bs,
 #ifdef CONFIG_LINUX_AIO
     BDRVRawState *s = bs->opaque;
     if (s->use_linux_aio) {
-        Error *local_err = NULL;
+        Error *local_err;
         if (!aio_setup_linux_aio(new_context, &local_err)) {
             error_reportf_err(local_err, "Unable to use native AIO, "
                                          "falling back to thread pool: ");
@@ -2020,8 +2007,7 @@ raw_regular_truncate(BlockDriverState *bs, int fd, int64_t offset,
 }
 
 static int coroutine_fn raw_co_truncate(BlockDriverState *bs, int64_t offset,
-                                        bool exact, PreallocMode prealloc,
-                                        Error **errp)
+                                        PreallocMode prealloc, Error **errp)
 {
     BDRVRawState *s = bs->opaque;
     struct stat st;
@@ -2034,7 +2020,6 @@ static int coroutine_fn raw_co_truncate(BlockDriverState *bs, int64_t offset,
     }
 
     if (S_ISREG(st.st_mode)) {
-        /* Always resizes to the exact @offset */
         return raw_regular_truncate(bs, s->fd, offset, prealloc, errp);
     }
 
@@ -2045,12 +2030,7 @@ static int coroutine_fn raw_co_truncate(BlockDriverState *bs, int64_t offset,
     }
 
     if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode)) {
-        int64_t cur_length = raw_getlength(bs);
-
-        if (offset != cur_length && exact) {
-            error_setg(errp, "Cannot resize device files");
-            return -ENOTSUP;
-        } else if (offset > cur_length) {
+        if (offset > raw_getlength(bs)) {
             error_setg(errp, "Cannot grow device files");
             return -EINVAL;
         }
@@ -2673,22 +2653,11 @@ static void coroutine_fn raw_co_invalidate_cache(BlockDriverState *bs,
 #endif /* !__linux__ */
 }
 
-static void raw_account_discard(BDRVRawState *s, uint64_t nbytes, int ret)
-{
-    if (ret) {
-        s->stats.discard_nb_failed++;
-    } else {
-        s->stats.discard_nb_ok++;
-        s->stats.discard_bytes_ok += nbytes;
-    }
-}
-
 static coroutine_fn int
 raw_do_pdiscard(BlockDriverState *bs, int64_t offset, int bytes, bool blkdev)
 {
     BDRVRawState *s = bs->opaque;
     RawPosixAIOData acb;
-    int ret;
 
     acb = (RawPosixAIOData) {
         .bs             = bs,
@@ -2702,9 +2671,7 @@ raw_do_pdiscard(BlockDriverState *bs, int64_t offset, int bytes, bool blkdev)
         acb.aio_type |= QEMU_AIO_BLKDEV;
     }
 
-    ret = raw_thread_pool_submit(bs, handle_aiocb_discard, &acb);
-    raw_account_discard(s, bytes, ret);
-    return ret;
+    return raw_thread_pool_submit(bs, handle_aiocb_discard, &acb);
 }
 
 static coroutine_fn int
@@ -2795,36 +2762,6 @@ static int raw_get_info(BlockDriverState *bs, BlockDriverInfo *bdi)
 
     bdi->unallocated_blocks_are_zero = s->discard_zeroes;
     return 0;
-}
-
-static BlockStatsSpecificFile get_blockstats_specific_file(BlockDriverState *bs)
-{
-    BDRVRawState *s = bs->opaque;
-    return (BlockStatsSpecificFile) {
-        .discard_nb_ok = s->stats.discard_nb_ok,
-        .discard_nb_failed = s->stats.discard_nb_failed,
-        .discard_bytes_ok = s->stats.discard_bytes_ok,
-    };
-}
-
-static BlockStatsSpecific *raw_get_specific_stats(BlockDriverState *bs)
-{
-    BlockStatsSpecific *stats = g_new(BlockStatsSpecific, 1);
-
-    stats->driver = BLOCKDEV_DRIVER_FILE;
-    stats->u.file = get_blockstats_specific_file(bs);
-
-    return stats;
-}
-
-static BlockStatsSpecific *hdev_get_specific_stats(BlockDriverState *bs)
-{
-    BlockStatsSpecific *stats = g_new(BlockStatsSpecific, 1);
-
-    stats->driver = BLOCKDEV_DRIVER_HOST_DEVICE;
-    stats->u.host_device = get_blockstats_specific_file(bs);
-
-    return stats;
 }
 
 static QemuOptsList raw_create_opts = {
@@ -3013,7 +2950,6 @@ BlockDriver bdrv_file = {
     .bdrv_co_create = raw_co_create,
     .bdrv_co_create_opts = raw_co_create_opts,
     .bdrv_has_zero_init = bdrv_has_zero_init_1,
-    .bdrv_has_zero_init_truncate = bdrv_has_zero_init_1,
     .bdrv_co_block_status = raw_co_block_status,
     .bdrv_co_invalidate_cache = raw_co_invalidate_cache,
     .bdrv_co_pwrite_zeroes = raw_co_pwrite_zeroes,
@@ -3034,7 +2970,6 @@ BlockDriver bdrv_file = {
     .bdrv_get_info = raw_get_info,
     .bdrv_get_allocated_file_size
                         = raw_get_allocated_file_size,
-    .bdrv_get_specific_stats = raw_get_specific_stats,
     .bdrv_check_perm = raw_check_perm,
     .bdrv_set_perm   = raw_set_perm,
     .bdrv_abort_perm_update = raw_abort_perm_update,
@@ -3394,12 +3329,10 @@ static int fd_open(BlockDriverState *bs)
 static coroutine_fn int
 hdev_co_pdiscard(BlockDriverState *bs, int64_t offset, int bytes)
 {
-    BDRVRawState *s = bs->opaque;
     int ret;
 
     ret = fd_open(bs);
     if (ret < 0) {
-        raw_account_discard(s, bytes, ret);
         return ret;
     }
     return raw_do_pdiscard(bs, offset, bytes, true);
@@ -3513,7 +3446,6 @@ static BlockDriver bdrv_host_device = {
     .bdrv_get_info = raw_get_info,
     .bdrv_get_allocated_file_size
                         = raw_get_allocated_file_size,
-    .bdrv_get_specific_stats = hdev_get_specific_stats,
     .bdrv_check_perm = raw_check_perm,
     .bdrv_set_perm   = raw_set_perm,
     .bdrv_abort_perm_update = raw_abort_perm_update,

@@ -21,7 +21,6 @@
 #include "tcg.h"
 #include "tcg-op.h"
 #include "tcg-op-gvec.h"
-#include "qemu/main-loop.h"
 #include "tcg-gvec-desc.h"
 
 #define MAX_UNROLL  4

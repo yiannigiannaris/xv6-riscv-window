@@ -1,4 +1,5 @@
 #include "qemu/osdep.h"
+#include "sysemu/sysemu.h"
 #include "keymaps.h"
 #include "ui/input.h"
 

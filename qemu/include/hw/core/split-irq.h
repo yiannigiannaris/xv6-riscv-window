@@ -35,6 +35,7 @@
 #ifndef HW_SPLIT_IRQ_H
 #define HW_SPLIT_IRQ_H
 
+#include "hw/irq.h"
 #include "hw/sysbus.h"
 #include "qom/object.h"
 

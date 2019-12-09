@@ -94,7 +94,7 @@ typedef struct CPUTLGState {
     struct {} end_reset_fields;
 } CPUTLGState;
 
-#include "hw/core/cpu.h"
+#include "qom/cpu.h"
 
 #define TYPE_TILEGX_CPU "tilegx-cpu"
 

@@ -19,11 +19,11 @@ Makefile*
 *.mak
 
 # qapi schema
-qapi/*.json
-qga/*.json
+*.json
 
 # headers
 *.h
 
 # code
 *.c
+

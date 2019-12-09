@@ -100,6 +100,7 @@ static inline void write_mem(IVState *s, uint64_t off,
 
 static void cleanup_vm(IVState *s)
 {
+    assert(!global_qtest);
     g_free(s->dev);
     qtest_shutdown(s->qs);
 }
@@ -387,7 +388,8 @@ static void test_ivshmem_hotplug(void)
 
     qts = qtest_init("-object memory-backend-ram,size=1M,id=mb1");
 
-    qtest_qmp_device_add(qts, "ivshmem-plain", "iv1",
+    global_qtest = qts;  /* TODO: Get rid of global_qtest here */
+    qtest_qmp_device_add("ivshmem-plain", "iv1",
                          "{'addr': %s, 'memdev': 'mb1'}",
                          stringify(PCI_SLOT_HP));
     if (strcmp(arch, "ppc64") != 0) {
@@ -395,6 +397,7 @@ static void test_ivshmem_hotplug(void)
     }
 
     qtest_quit(qts);
+    global_qtest = NULL;
 }
 
 static void test_ivshmem_memdev(void)

@@ -9,12 +9,9 @@
 
 #include "qemu/osdep.h"
 #include "hw/sysbus.h"
-#include "migration/vmstate.h"
-#include "hw/irq.h"
 #include "hw/pci/pci.h"
 #include "hw/pci/pci_bus.h"
 #include "hw/pci/pci_host.h"
-#include "hw/qdev-properties.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
 

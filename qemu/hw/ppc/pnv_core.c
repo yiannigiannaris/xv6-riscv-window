@@ -18,7 +18,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "sysemu/reset.h"
+#include "sysemu/sysemu.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
@@ -28,7 +28,6 @@
 #include "hw/ppc/pnv_core.h"
 #include "hw/ppc/pnv_xscom.h"
 #include "hw/ppc/xics.h"
-#include "hw/qdev-properties.h"
 
 static const char *pnv_core_cpu_typename(PnvCore *pc)
 {
@@ -40,11 +39,11 @@ static const char *pnv_core_cpu_typename(PnvCore *pc)
     return cpu_type;
 }
 
-static void pnv_core_cpu_reset(PowerPCCPU *cpu, PnvChip *chip)
+static void pnv_cpu_reset(void *opaque)
 {
+    PowerPCCPU *cpu = opaque;
     CPUState *cs = CPU(cpu);
     CPUPPCState *env = &cpu->env;
-    PnvChipClass *pcc = PNV_CHIP_GET_CLASS(chip);
 
     cpu_reset(cs);
 
@@ -55,8 +54,6 @@ static void pnv_core_cpu_reset(PowerPCCPU *cpu, PnvChip *chip)
     env->gpr[3] = PNV_FDT_ADDR;
     env->nip = 0x10;
     env->msr |= MSR_HVB; /* Hypervisor mode */
-
-    pcc->intc_reset(chip, cpu);
 }
 
 /*
@@ -162,7 +159,7 @@ static const MemoryRegionOps pnv_core_power9_xscom_ops = {
     .endianness = DEVICE_BIG_ENDIAN,
 };
 
-static void pnv_core_cpu_realize(PowerPCCPU *cpu, PnvChip *chip, Error **errp)
+static void pnv_realize_vcpu(PowerPCCPU *cpu, PnvChip *chip, Error **errp)
 {
     CPUPPCState *env = &cpu->env;
     int core_pir;
@@ -194,17 +191,8 @@ static void pnv_core_cpu_realize(PowerPCCPU *cpu, PnvChip *chip, Error **errp)
 
     /* Set time-base frequency to 512 MHz */
     cpu_ppc_tb_init(env, PNV_TIMEBASE_FREQ);
-}
 
-static void pnv_core_reset(void *dev)
-{
-    CPUCore *cc = CPU_CORE(dev);
-    PnvCore *pc = PNV_CORE(dev);
-    int i;
-
-    for (i = 0; i < cc->nr_threads; i++) {
-        pnv_core_cpu_reset(pc->threads[i], pc->chip);
-    }
+    qemu_register_reset(pnv_cpu_reset, cpu);
 }
 
 static void pnv_core_realize(DeviceState *dev, Error **errp)
@@ -225,7 +213,6 @@ static void pnv_core_realize(DeviceState *dev, Error **errp)
                                 "required link 'chip' not found: ");
         return;
     }
-    pc->chip = PNV_CHIP(chip);
 
     pc->threads = g_new(PowerPCCPU *, cc->nr_threads);
     for (i = 0; i < cc->nr_threads; i++) {
@@ -247,7 +234,7 @@ static void pnv_core_realize(DeviceState *dev, Error **errp)
     }
 
     for (j = 0; j < cc->nr_threads; j++) {
-        pnv_core_cpu_realize(pc->threads[j], pc->chip, &local_err);
+        pnv_realize_vcpu(pc->threads[j], PNV_CHIP(chip), &local_err);
         if (local_err) {
             goto err;
         }
@@ -256,8 +243,6 @@ static void pnv_core_realize(DeviceState *dev, Error **errp)
     snprintf(name, sizeof(name), "xscom-core.%d", cc->core_id);
     pnv_xscom_region_init(&pc->xscom_regs, OBJECT(dev), pcc->xscom_ops,
                           pc, name, PNV_XSCOM_EX_SIZE);
-
-    qemu_register_reset(pnv_core_reset, pc);
     return;
 
 err:
@@ -269,12 +254,12 @@ err:
     error_propagate(errp, local_err);
 }
 
-static void pnv_core_cpu_unrealize(PowerPCCPU *cpu, PnvChip *chip)
+static void pnv_unrealize_vcpu(PowerPCCPU *cpu)
 {
     PnvCPUState *pnv_cpu = pnv_cpu_state(cpu);
-    PnvChipClass *pcc = PNV_CHIP_GET_CLASS(chip);
 
-    pcc->intc_destroy(chip, cpu);
+    qemu_unregister_reset(pnv_cpu_reset, cpu);
+    object_unparent(OBJECT(pnv_cpu_state(cpu)->intc));
     cpu_remove_sync(CPU(cpu));
     cpu->machine_data = NULL;
     g_free(pnv_cpu);
@@ -287,10 +272,8 @@ static void pnv_core_unrealize(DeviceState *dev, Error **errp)
     CPUCore *cc = CPU_CORE(dev);
     int i;
 
-    qemu_unregister_reset(pnv_core_reset, pc);
-
     for (i = 0; i < cc->nr_threads; i++) {
-        pnv_core_cpu_unrealize(pc->threads[i], pc->chip);
+        pnv_unrealize_vcpu(pc->threads[i]);
     }
     g_free(pc->threads);
 }

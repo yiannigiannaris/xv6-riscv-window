@@ -26,6 +26,7 @@
 #include "qemu/main-loop.h"
 #include "qemu/timer.h"
 #include "sysemu/replay.h"
+#include "sysemu/sysemu.h"
 #include "sysemu/cpus.h"
 
 #ifdef CONFIG_POSIX
@@ -46,6 +47,9 @@
 typedef struct QEMUClock {
     /* We rely on BQL to protect the timerlists */
     QLIST_HEAD(, QEMUTimerList) timerlists;
+
+    NotifierList reset_notifiers;
+    int64_t last;
 
     QEMUClockType type;
     bool enabled;
@@ -127,7 +131,9 @@ static void qemu_clock_init(QEMUClockType type, QEMUTimerListNotifyCB *notify_cb
 
     clock->type = type;
     clock->enabled = (type == QEMU_CLOCK_VIRTUAL ? false : true);
+    clock->last = INT64_MIN;
     QLIST_INIT(&clock->timerlists);
+    notifier_list_init(&clock->reset_notifiers);
     main_loop_tlg.tl[type] = timerlist_new(type, notify_cb, NULL);
 }
 
@@ -247,38 +253,14 @@ int64_t timerlist_deadline_ns(QEMUTimerList *timer_list)
  * ignore whether or not the clock should be used in deadline
  * calculations.
  */
-int64_t qemu_clock_deadline_ns_all(QEMUClockType type, int attr_mask)
+int64_t qemu_clock_deadline_ns_all(QEMUClockType type)
 {
     int64_t deadline = -1;
-    int64_t delta;
-    int64_t expire_time;
-    QEMUTimer *ts;
     QEMUTimerList *timer_list;
     QEMUClock *clock = qemu_clock_ptr(type);
-
-    if (!clock->enabled) {
-        return -1;
-    }
-
     QLIST_FOREACH(timer_list, &clock->timerlists, list) {
-        qemu_mutex_lock(&timer_list->active_timers_lock);
-        ts = timer_list->active_timers;
-        /* Skip all external timers */
-        while (ts && (ts->attributes & ~attr_mask)) {
-            ts = ts->next;
-        }
-        if (!ts) {
-            qemu_mutex_unlock(&timer_list->active_timers_lock);
-            continue;
-        }
-        expire_time = ts->expire_time;
-        qemu_mutex_unlock(&timer_list->active_timers_lock);
-
-        delta = expire_time - qemu_clock_get_ns(type);
-        if (delta <= 0) {
-            delta = 0;
-        }
-        deadline = qemu_soonest_timeout(deadline, delta);
+        deadline = qemu_soonest_timeout(deadline,
+                                        timerlist_deadline_ns(timer_list));
     }
     return deadline;
 }
@@ -322,7 +304,11 @@ int qemu_timeout_ns_to_ms(int64_t ns)
     ms = DIV_ROUND_UP(ns, SCALE_MS);
 
     /* To avoid overflow problems, limit this to 2^31, i.e. approx 25 days */
-    return MIN(ms, INT32_MAX);
+    if (ms > (int64_t) INT32_MAX) {
+        ms = INT32_MAX;
+    }
+
+    return (int) ms;
 }
 
 
@@ -644,6 +630,9 @@ int64_t timerlistgroup_deadline_ns(QEMUTimerListGroup *tlg)
 
 int64_t qemu_clock_get_ns(QEMUClockType type)
 {
+    int64_t now, last;
+    QEMUClock *clock = qemu_clock_ptr(type);
+
     switch (type) {
     case QEMU_CLOCK_REALTIME:
         return get_clock();
@@ -655,10 +644,41 @@ int64_t qemu_clock_get_ns(QEMUClockType type)
             return cpu_get_clock();
         }
     case QEMU_CLOCK_HOST:
-        return REPLAY_CLOCK(REPLAY_CLOCK_HOST, get_clock_realtime());
+        now = REPLAY_CLOCK(REPLAY_CLOCK_HOST, get_clock_realtime());
+        last = clock->last;
+        clock->last = now;
+        if (now < last || now > (last + get_max_clock_jump())) {
+            notifier_list_notify(&clock->reset_notifiers, &now);
+        }
+        return now;
     case QEMU_CLOCK_VIRTUAL_RT:
         return REPLAY_CLOCK(REPLAY_CLOCK_VIRTUAL_RT, cpu_get_clock());
     }
+}
+
+uint64_t qemu_clock_get_last(QEMUClockType type)
+{
+    QEMUClock *clock = qemu_clock_ptr(type);
+    return clock->last;
+}
+
+void qemu_clock_set_last(QEMUClockType type, uint64_t last)
+{
+    QEMUClock *clock = qemu_clock_ptr(type);
+    clock->last = last;
+}
+
+void qemu_clock_register_reset_notifier(QEMUClockType type,
+                                        Notifier *notifier)
+{
+    QEMUClock *clock = qemu_clock_ptr(type);
+    notifier_list_add(&clock->reset_notifiers, notifier);
+}
+
+void qemu_clock_unregister_reset_notifier(QEMUClockType type,
+                                          Notifier *notifier)
+{
+    notifier_remove(notifier);
 }
 
 void init_clocks(QEMUTimerListNotifyCB *notify_cb)

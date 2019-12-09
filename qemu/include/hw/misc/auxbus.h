@@ -25,8 +25,7 @@
 #ifndef HW_MISC_AUXBUS_H
 #define HW_MISC_AUXBUS_H
 
-#include "exec/memory.h"
-#include "hw/qdev-core.h"
+#include "hw/qdev.h"
 
 typedef struct AUXBus AUXBus;
 typedef struct AUXSlave AUXSlave;

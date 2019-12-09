@@ -9,11 +9,10 @@
 
 #include "qemu/osdep.h"
 #include "hw/sysbus.h"
-#include "migration/vmstate.h"
 #include "qemu/timer.h"
-#include "hw/irq.h"
+#include "hw/qdev.h"
 #include "hw/ptimer.h"
-#include "hw/qdev-properties.h"
+#include "qemu/main-loop.h"
 #include "qemu/module.h"
 #include "qemu/log.h"
 
@@ -74,10 +73,7 @@ static uint32_t arm_timer_read(void *opaque, hwaddr offset)
     }
 }
 
-/*
- * Reset the timer limit after settings have changed.
- * May only be called from inside a ptimer transaction block.
- */
+/* Reset the timer limit after settings have changed.  */
 static void arm_timer_recalibrate(arm_timer_state *s, int reload)
 {
     uint32_t limit;
@@ -104,16 +100,13 @@ static void arm_timer_write(void *opaque, hwaddr offset,
     switch (offset >> 2) {
     case 0: /* TimerLoad */
         s->limit = value;
-        ptimer_transaction_begin(s->timer);
         arm_timer_recalibrate(s, 1);
-        ptimer_transaction_commit(s->timer);
         break;
     case 1: /* TimerValue */
         /* ??? Linux seems to want to write to this readonly register.
            Ignore it.  */
         break;
     case 2: /* TimerControl */
-        ptimer_transaction_begin(s->timer);
         if (s->control & TIMER_CTRL_ENABLE) {
             /* Pause the timer if it is running.  This may cause some
                inaccuracy dure to rounding, but avoids a whole lot of other
@@ -133,16 +126,13 @@ static void arm_timer_write(void *opaque, hwaddr offset,
             /* Restart the timer if still enabled.  */
             ptimer_run(s->timer, (s->control & TIMER_CTRL_ONESHOT) != 0);
         }
-        ptimer_transaction_commit(s->timer);
         break;
     case 3: /* TimerIntClr */
         s->int_level = 0;
         break;
     case 6: /* TimerBGLoad */
         s->limit = value;
-        ptimer_transaction_begin(s->timer);
         arm_timer_recalibrate(s, 0);
-        ptimer_transaction_commit(s->timer);
         break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR,
@@ -174,12 +164,14 @@ static const VMStateDescription vmstate_arm_timer = {
 static arm_timer_state *arm_timer_init(uint32_t freq)
 {
     arm_timer_state *s;
+    QEMUBH *bh;
 
     s = (arm_timer_state *)g_malloc0(sizeof(arm_timer_state));
     s->freq = freq;
     s->control = TIMER_CTRL_IE;
 
-    s->timer = ptimer_init(arm_timer_tick, s, PTIMER_POLICY_DEFAULT);
+    bh = qemu_bh_new(arm_timer_tick, s);
+    s->timer = ptimer_init(bh, PTIMER_POLICY_DEFAULT);
     vmstate_register(NULL, -1, &vmstate_arm_timer, s);
     return s;
 }

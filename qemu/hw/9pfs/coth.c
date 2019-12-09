@@ -15,7 +15,6 @@
 #include "qemu/osdep.h"
 #include "block/thread-pool.h"
 #include "qemu/coroutine.h"
-#include "qemu/main-loop.h"
 #include "coth.h"
 
 /* Called from QEMU I/O thread.  */

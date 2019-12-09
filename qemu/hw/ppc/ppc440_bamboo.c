@@ -17,6 +17,7 @@
 #include "qemu-common.h"
 #include "qemu/error-report.h"
 #include "net/net.h"
+#include "hw/hw.h"
 #include "hw/pci/pci.h"
 #include "hw/boards.h"
 #include "sysemu/kvm.h"
@@ -30,7 +31,6 @@
 #include "ppc405.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/qtest.h"
-#include "sysemu/reset.h"
 #include "hw/sysbus.h"
 
 #define BINARY_DEVICE_TREE_FILE "bamboo.dtb"

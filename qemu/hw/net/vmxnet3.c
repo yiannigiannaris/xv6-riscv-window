@@ -18,7 +18,6 @@
 #include "qemu/osdep.h"
 #include "hw/hw.h"
 #include "hw/pci/pci.h"
-#include "hw/qdev-properties.h"
 #include "net/tap.h"
 #include "net/checksum.h"
 #include "sysemu/sysemu.h"
@@ -27,7 +26,6 @@
 #include "hw/pci/msix.h"
 #include "hw/pci/msi.h"
 #include "migration/register.h"
-#include "migration/vmstate.h"
 
 #include "vmxnet3.h"
 #include "vmxnet3_defs.h"
@@ -2143,6 +2141,21 @@ vmxnet3_cleanup_msi(VMXNET3State *s)
     msi_uninit(d);
 }
 
+static void
+vmxnet3_msix_save(QEMUFile *f, void *opaque)
+{
+    PCIDevice *d = PCI_DEVICE(opaque);
+    msix_save(d, f);
+}
+
+static int
+vmxnet3_msix_load(QEMUFile *f, void *opaque, int version_id)
+{
+    PCIDevice *d = PCI_DEVICE(opaque);
+    msix_load(d, f);
+    return 0;
+}
+
 static const MemoryRegionOps b0_ops = {
     .read = vmxnet3_io_bar0_read,
     .write = vmxnet3_io_bar0_write,
@@ -2161,6 +2174,11 @@ static const MemoryRegionOps b1_ops = {
             .min_access_size = 4,
             .max_access_size = 4,
     },
+};
+
+static SaveVMHandlers savevm_vmxnet3_msix = {
+    .save_state = vmxnet3_msix_save,
+    .load_state = vmxnet3_msix_load,
 };
 
 static uint64_t vmxnet3_device_serial_num(VMXNET3State *s)
@@ -2185,6 +2203,7 @@ static uint64_t vmxnet3_device_serial_num(VMXNET3State *s)
 
 static void vmxnet3_pci_realize(PCIDevice *pci_dev, Error **errp)
 {
+    DeviceState *dev = DEVICE(pci_dev);
     VMXNET3State *s = VMXNET3(pci_dev);
     int ret;
 
@@ -2230,6 +2249,8 @@ static void vmxnet3_pci_realize(PCIDevice *pci_dev, Error **errp)
         pcie_dev_ser_num_init(pci_dev, VMXNET3_DSN_OFFSET,
                               vmxnet3_device_serial_num(s));
     }
+
+    register_savevm_live(dev, "vmxnet3-msix", -1, 1, &savevm_vmxnet3_msix, s);
 }
 
 static void vmxnet3_instance_init(Object *obj)
@@ -2242,9 +2263,12 @@ static void vmxnet3_instance_init(Object *obj)
 
 static void vmxnet3_pci_uninit(PCIDevice *pci_dev)
 {
+    DeviceState *dev = DEVICE(pci_dev);
     VMXNET3State *s = VMXNET3(pci_dev);
 
     VMW_CBPRN("Starting uninit...");
+
+    unregister_savevm(dev, "vmxnet3-msix", s);
 
     vmxnet3_net_uninit(s);
 
@@ -2416,6 +2440,29 @@ static const VMStateDescription vmstate_vmxnet3_int_state = {
     }
 };
 
+static bool vmxnet3_vmstate_need_pcie_device(void *opaque)
+{
+    VMXNET3State *s = VMXNET3(opaque);
+
+    return !(s->compat_flags & VMXNET3_COMPAT_FLAG_DISABLE_PCIE);
+}
+
+static bool vmxnet3_vmstate_test_pci_device(void *opaque, int version_id)
+{
+    return !vmxnet3_vmstate_need_pcie_device(opaque);
+}
+
+static const VMStateDescription vmstate_vmxnet3_pcie_device = {
+    .name = "vmxnet3/pcie",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .needed = vmxnet3_vmstate_need_pcie_device,
+    .fields = (VMStateField[]) {
+        VMSTATE_PCI_DEVICE(parent_obj, VMXNET3State),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static const VMStateDescription vmstate_vmxnet3 = {
     .name = "vmxnet3",
     .version_id = 1,
@@ -2423,8 +2470,9 @@ static const VMStateDescription vmstate_vmxnet3 = {
     .pre_save = vmxnet3_pre_save,
     .post_load = vmxnet3_post_load,
     .fields = (VMStateField[]) {
-            VMSTATE_PCI_DEVICE(parent_obj, VMXNET3State),
-            VMSTATE_MSIX(parent_obj, VMXNET3State),
+            VMSTATE_STRUCT_TEST(parent_obj, VMXNET3State,
+                                vmxnet3_vmstate_test_pci_device, 0,
+                                vmstate_pci_device, PCIDevice),
             VMSTATE_BOOL(rx_packets_compound, VMXNET3State),
             VMSTATE_BOOL(rx_vlan_stripping, VMXNET3State),
             VMSTATE_BOOL(lro_supported, VMXNET3State),
@@ -2460,6 +2508,7 @@ static const VMStateDescription vmstate_vmxnet3 = {
     },
     .subsections = (const VMStateDescription*[]) {
         &vmxstate_vmxnet3_mcast_list,
+        &vmstate_vmxnet3_pcie_device,
         NULL
     }
 };

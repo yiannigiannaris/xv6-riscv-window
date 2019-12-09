@@ -16,9 +16,8 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/hw.h"
 #include "hw/pci/pci.h"
-#include "hw/qdev-properties.h"
-#include "migration/vmstate.h"
 #include "hw/pci/msix.h"
 #include "net/net.h"
 #include "net/eth.h"

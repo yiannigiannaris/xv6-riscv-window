@@ -19,9 +19,6 @@
 #ifndef HW_RISCV_SPIKE_H
 #define HW_RISCV_SPIKE_H
 
-#include "hw/riscv/riscv_hart.h"
-#include "hw/sysbus.h"
-
 typedef struct {
     /*< private >*/
     SysBusDevice parent_obj;
@@ -36,6 +33,10 @@ enum {
     SPIKE_MROM,
     SPIKE_CLINT,
     SPIKE_DRAM
+};
+
+enum {
+    SPIKE_CLOCK_FREQ = 1000000000
 };
 
 #if defined(TARGET_RISCV32)

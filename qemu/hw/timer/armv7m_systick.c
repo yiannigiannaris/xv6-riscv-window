@@ -11,8 +11,6 @@
 
 #include "qemu/osdep.h"
 #include "hw/timer/armv7m_systick.h"
-#include "migration/vmstate.h"
-#include "hw/irq.h"
 #include "hw/sysbus.h"
 #include "qemu/timer.h"
 #include "qemu/log.h"

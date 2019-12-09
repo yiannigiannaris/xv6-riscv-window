@@ -20,8 +20,7 @@ static void test_hash_speed(const void *opaque)
     size_t chunk_size = (size_t)opaque;
     uint8_t *in = NULL, *out = NULL;
     size_t out_len = 0;
-    const size_t total = 2 * GiB;
-    size_t remain;
+    double total = 0.0;
     struct iovec iov;
     int ret;
 
@@ -32,20 +31,20 @@ static void test_hash_speed(const void *opaque)
     iov.iov_len = chunk_size;
 
     g_test_timer_start();
-    remain = total;
-    while (remain) {
+    do {
         ret = qcrypto_hash_bytesv(QCRYPTO_HASH_ALG_SHA256,
                                   &iov, 1, &out, &out_len,
                                   NULL);
         g_assert(ret == 0);
 
-        remain -= chunk_size;
-    }
-    g_test_timer_elapsed();
+        total += chunk_size;
+    } while (g_test_timer_elapsed() < 5.0);
 
+    total /= MiB;
     g_print("sha256: ");
-    g_print("Hash %zu GB chunk size %zu bytes ", total / GiB, chunk_size);
-    g_print("%.2f MB/sec ", (double)total / MiB / g_test_timer_last());
+    g_print("Testing chunk_size %zu bytes ", chunk_size);
+    g_print("done: %.2f MB in %.2f secs: ", total, g_test_timer_last());
+    g_print("%.2f MB/sec\n", total / g_test_timer_last());
 
     g_free(out);
     g_free(in);

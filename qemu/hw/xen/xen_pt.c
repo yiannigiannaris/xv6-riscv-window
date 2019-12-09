@@ -57,7 +57,6 @@
 #include <sys/ioctl.h>
 
 #include "hw/pci/pci.h"
-#include "hw/qdev-properties.h"
 #include "hw/xen/xen.h"
 #include "hw/i386/pc.h"
 #include "hw/xen/xen-legacy-backend.h"

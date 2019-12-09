@@ -21,17 +21,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "hw/hw.h"
 #include "hw/isa/isa.h"
-#include "migration/vmstate.h"
 #include "hw/i386/pc.h"
 #include "hw/input/ps2.h"
-#include "hw/irq.h"
 #include "hw/input/i8042.h"
-#include "sysemu/reset.h"
-#include "sysemu/runstate.h"
+#include "sysemu/sysemu.h"
 
 #include "trace.h"
 

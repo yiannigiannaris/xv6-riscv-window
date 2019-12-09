@@ -249,7 +249,7 @@ STEXI
 Show virtual to physical memory mappings.
 ETEXI
 
-#if defined(TARGET_I386) || defined(TARGET_RISCV)
+#if defined(TARGET_I386)
     {
         .name       = "mem",
         .args_type  = "",

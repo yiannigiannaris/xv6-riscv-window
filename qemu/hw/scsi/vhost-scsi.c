@@ -20,6 +20,7 @@
 #include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/module.h"
+#include "qemu/queue.h"
 #include "monitor/monitor.h"
 #include "migration/blocker.h"
 #include "hw/virtio/vhost-scsi.h"
@@ -28,9 +29,7 @@
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-access.h"
 #include "hw/fw-path-provider.h"
-#include "hw/qdev-properties.h"
 #include "qemu/cutils.h"
-#include "sysemu/sysemu.h"
 
 /* Features supported by host kernel. */
 static const int kernel_feature_bits[] = {

@@ -1,7 +1,7 @@
 #ifndef EDID_H
 #define EDID_H
 
-#include "qom/object.h"
+#include "hw/hw.h"
 
 typedef struct qemu_edid_info {
     const char *vendor; /* http://www.uefi.org/pnp_id_list */

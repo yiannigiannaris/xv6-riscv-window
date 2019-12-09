@@ -24,7 +24,6 @@
 
 #include "qemu/osdep.h"
 #include "hw/hw.h"
-#include "hw/qdev-properties.h"
 #include "hw/sysbus.h"
 #include "trace.h"
 #include "ui/console.h"
@@ -34,7 +33,6 @@
 #include "qemu/module.h"
 
 #define BITS 8
-#include "migration/vmstate.h"
 #include "milkymist-vgafb_template.h"
 #define BITS 15
 #include "milkymist-vgafb_template.h"

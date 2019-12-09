@@ -22,7 +22,6 @@
 #include "qemu/module.h"
 #include "qapi/error.h"
 
-#include "hw/irq.h"
 #include "hw/sysbus.h"
 #include "cpu.h"
 

@@ -13,6 +13,7 @@
 #include "qemu/error-report.h"
 #include "sysemu/replay.h"
 #include "replay-internal.h"
+#include "sysemu/sysemu.h"
 #include "chardev/char.h"
 
 /* Char drivers that generate qemu_chr_be_write events
