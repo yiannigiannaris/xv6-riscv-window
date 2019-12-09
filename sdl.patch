@@ -1,0 +1,13 @@
+diff --git a/ui/sdl2.c b/ui/sdl2.c
+index bd4e73661d..681382dea7 100644
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -663,7 +663,7 @@ static void sdl_mouse_warp(DisplayChangeListener *dcl,
+         if (gui_grab || qemu_input_is_absolute() || absolute_enabled) {
+             SDL_SetCursor(guest_sprite);
+             if (!qemu_input_is_absolute() && !absolute_enabled) {
+-                SDL_WarpMouseInWindow(scon->real_window, x, y);
++               // SDL_WarpMouseInWindow(scon->real_window, x, y);
+             }
+         }
+     } else if (gui_grab) {
