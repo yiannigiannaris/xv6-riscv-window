@@ -41,6 +41,7 @@ entry("crash");
 entry("mount");
 entry("umount");
 entry("mkwindow");
+entry("mkdiagram");
 entry("updatewindow");
 entry("closewindow");
 entry("mkapplauncher");

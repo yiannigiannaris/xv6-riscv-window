@@ -154,7 +154,7 @@ start_input_handler()
         printf("input_handler error: device type not recognized\n");
       }
     }
-    /*sleep(&endidx, &startlock);*/
+    sleep(&endidx, &startlock);
   }
 }
 

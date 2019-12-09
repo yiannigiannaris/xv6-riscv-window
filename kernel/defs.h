@@ -223,11 +223,13 @@ void            draw_rect(int, int, int, int, uint32, uint8);
 void            draw_line(int, int, int, int, uint32, uint8);
 void            draw_circle(int, int, int, uint32, uint8);
 void            draw_wallpaper(void);
+void            draw_diagram(uint32*);
 
 
 // windows.c
 void            init_windows(void);
 struct window*  new_window(struct file*, struct file*);
+struct window*  new_diagram(struct file*, struct file*);
 int             update_window(struct file*, int, int);
 void            user_close_window(struct file*);
 struct window*  make_applauncher(struct file*, struct file*);

@@ -11,6 +11,7 @@
 #include "display.h"
 #include "colors.h"
 #include "wallpaper.h"
+#include "windows_diagram.h"
 
 struct frame dframe;
 
@@ -23,6 +24,12 @@ draw_wallpaper()
 {
   /*printf("%p\n", wallpaper_frame);*/
   memmove(dframe.frame_buf, wallpaper_frame, FRAME_WIDTH*FRAME_HEIGHT*4);
+}
+
+void
+draw_diagram(uint32 *frame_buf)
+{
+  memmove(frame_buf, system_diagram, 800*600*4);
 }
 
 void

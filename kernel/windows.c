@@ -193,6 +193,42 @@ new_window(struct file *rf, struct file *wf)
 }
 
 struct window*
+new_diagram(struct file *rf, struct file *wf)
+{
+  acquire(&windows_lock);
+  struct window *win = 0;
+  for(int i = 0; i < MAX_WINDOWS; i++){
+    if(windows[i].free){
+      windows[i].free = 0;
+      win = &windows[i];
+      break;
+    }
+  }
+  if(!win){
+    release(&windows_lock);
+    return 0;
+  }
+  win->rf = rf;
+  win->wf = wf;
+  win->xpos = 50;
+  win->ypos = 50;
+  if(!head){
+    head = win;
+    win->next = win;
+    win->prev = win;
+  } else{
+    win->next = head;
+    win->prev = head->prev;
+    head->prev->next = win;
+    head->prev = win;
+    head = win;
+  }
+  draw_diagram(win->frame_buf);
+  release(&windows_lock);
+  return win;
+}
+
+struct window*
 make_applauncher(struct file *rf, struct file *wf)
 {
   acquire(&windows_lock);

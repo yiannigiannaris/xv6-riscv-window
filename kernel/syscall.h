@@ -34,3 +34,4 @@
 #define SYS_startinputhandler 31
 #define SYS_sigalarm 32
 #define SYS_sigreturn 33
+#define SYS_mkdiagram 34

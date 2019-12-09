@@ -114,6 +114,7 @@ extern uint64 sys_mkapplauncher(void);
 extern uint64 sys_startinputhandler(void);
 extern uint64 sys_sigalarm(void);
 extern uint64 sys_sigreturn(void);
+extern uint64 sys_mkdiagram(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -147,6 +148,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_startinputhandler] sys_startinputhandler,
 [SYS_sigalarm] sys_sigalarm,
 [SYS_sigreturn] sys_sigreturn,
+[SYS_mkdiagram] sys_mkdiagram,
 };
 
 void
