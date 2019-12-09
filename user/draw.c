@@ -14,7 +14,7 @@ void
 set_pixel(uint32 *fb, int frame_width, int frame_height, int x, int y, uint32 color, uint32 alpha)
 {
   uint32 rgba = (color << 8) | alpha;
-  if((y >= 0 && y < frame_height) && (x >= 0 && x ))
+  if((y >= 0 && y < frame_height) && (x >= 0 && x < frame_width))
     *(fb + y * frame_width + x) = rgba;
 }
 

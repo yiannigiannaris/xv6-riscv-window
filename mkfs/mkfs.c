@@ -267,7 +267,9 @@ rsect(uint sec, void *buf)
     perror("lseek");
     exit(1);
   }
-  if(read(fsfd, buf, BSIZE) != BSIZE){
+  int val = read(fsfd, buf, BSIZE);
+  if( val != BSIZE){
+    printf("read response: %d\n", val);
     perror("read");
     exit(1);
   }

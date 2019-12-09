@@ -625,7 +625,7 @@ main(void)
 {
   test_float();
   struct gui* gui = init_gui();
-  struct window* window1 = new_window(gui, 235, 340);  
+  struct window* window1 = new_window(gui, 240, 345);  
   draw_rectangle(window1, C_WHITE, 255);
   struct state* state1 = new_state();
   add_state(window1, state1);

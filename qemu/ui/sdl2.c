@@ -662,7 +662,7 @@ static void sdl_mouse_warp(DisplayChangeListener *dcl,
         if (gui_grab || qemu_input_is_absolute() || absolute_enabled) {
             SDL_SetCursor(guest_sprite);
             if (!qemu_input_is_absolute() && !absolute_enabled) {
-                //SDL_WarpMouseInWindow(scon->real_window, x, y);
+                SDL_WarpMouseInWindow(scon->real_window, x, y);
             }
         }
     } else if (gui_grab) {

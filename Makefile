@@ -155,6 +155,7 @@ UPROGS=\
 	$U/_input_handler\
 	$U/_applauncher\
 	$U/_alarmtest\
+	$U/_present\
   #$U/_graphicstest\
 
 UAPPS=\
@@ -162,7 +163,7 @@ UAPPS=\
 	$U/_calc\
 
 fs.img: mkfs/mkfs README user/xargstest.sh $(UPROGS) $(UAPPS)
-	mkfs/mkfs fs.img README user/xargstest.sh user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS) -apps wintest $U/_windowstest calculator $U/_calc
+	mkfs/mkfs fs.img README user/xargstest.sh user/ter-u12n.bdf user/ter-u18n.bdf user/ter-u22n.bdf user/ter-u28n.bdf user/ter-u32n.bdf $(UPROGS) -apps wintest $U/_windowstest calculator $U/_calc presentation $U/_present
 
 -include kernel/*.d user/*.d
 
