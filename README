@@ -1,3 +1,9 @@
+RUNNING WINDOW SYSTEM
+
+1. Run configqemu.sh script
+2. run make qemu
+
+
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern RISC-V multiprocessor using ANSI C.
